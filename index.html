@@ -1,19 +1,20 @@
-
 <!DOCTYPE html>
 <html lang="cs">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Canadian Medical — Patient Suite</title>
+<title>Canadian Medical — Digitální sestra</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{background:#111827;font-family:'Inter','Helvetica Neue',Arial,sans-serif;}
-  input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:#E5E7EB;outline:none;}
-  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#1C3B8E;cursor:pointer;}
-  ::-webkit-scrollbar{width:0;height:0;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#111827;font-family:'Inter','Helvetica Neue',Arial,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px;}
+input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:#E5E7EB;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:#1C3B8E;cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.2);}
+textarea{font-family:'Inter','Helvetica Neue',Arial,sans-serif;}
+::-webkit-scrollbar{width:0;height:0;}
+select{font-family:'Inter','Helvetica Neue',Arial,sans-serif;}
 </style>
 </head>
 <body>
@@ -21,529 +22,830 @@
 <script type="text/babel">
 const {useState,useRef,useEffect,useCallback}=React;
 
+// ─── TOKENS ──────────────────────────────────────────────────────────────────
 const T={
+  blue:"#1C3B8E",blueD:"#152D6B",blueL:"#EFF6FF",
+  red:"#E8314A",redL:"#FEE2E2",
+  green:"#22A06B",greenL:"#D1FAE5",
+  orange:"#D97706",orangeL:"#FEF3C7",
+  g50:"#F9FAFB",g100:"#F3F4F6",g200:"#E5E7EB",
+  g300:"#D1D5DB",g400:"#9CA3AF",g500:"#6B7280",
+  g700:"#374151",g900:"#111827",white:"#FFFFFF",
+};
+
+// ─── PATIENT ──────────────────────────────────────────────────────────────────
+const PATIENT={name:"Lucie Nováková",age:54,doctor:"MUDr. Vostradovská",
+  meds:[{name:"Prestarium 5mg",freq:"1× denně"},{name:"Aerius 5mg",freq:"dle potřeby"}],
+  allergies:["Penicilin"],conditions:["Hypertenze","Sezónní alergie"],lastVisit:"12. 2. 2025"};
+
+// ─── KEYWORDS ────────────────────────────────────────────────────────────────
+const EMERG_KW=["bolest na hrudi","chest pain","dušnost","shortness of breath","mdloba","bezvědomí","infarkt","mrtvice","krev","krvácení","ochrnutí","paralýza","silná bolest hlavy","dvojité vidění","nemohu dýchat"];
+const checkEmerg=txt=>EMERG_KW.some(k=>txt.toLowerCase().includes(k));
+
+// ─── VISIT TYPES ─────────────────────────────────────────────────────────────
+const VISIT_TYPES=[
+  {key:"pain",label:"Bolest / akutní potíž",icon:"🔴",desc:"Nový nebo zhoršující se příznak"},
+  {key:"routine",label:"Preventivní prohlídka",icon:"📋",desc:"Pravidelná kontrola"},
+  {key:"vaccination",label:"Očkování",icon:"💉",desc:"Aplikace vakcíny"},
+  {key:"presurgery",label:"Předoperační vyšetření",icon:"🔬",desc:"Příprava před operací"},
+  {key:"surgery",label:"Nástup k operaci",icon:"🏥",desc:"Surgery check-in"},
+];
+
+const BODY_LOCS=["Hlava / obličej","Krk","Hrudník","Břicho","Záda – horní","Záda – dolní","Rameno","Paže / loket","Ruka / zápěstí","Kyčel / tříslo","Koleno","Bérec / kotník","Chodidlo","Celé tělo"];
+const CHARS=[{v:"sharp",l:"Ostrá"},{v:"dull",l:"Tupá"},{v:"throb",l:"Tepající"},{v:"burn",l:"Pálení"},{v:"numb",l:"Brnění"},{v:"press",l:"Tlak"},{v:"cramp",l:"Křeče"}];
+const DUR=[{v:0,l:"< 24 h"},{v:1,l:"2–7 dní"},{v:2,l:"1–4 týdny"},{v:3,l:"1–3 měs."},{v:4,l:"Chronické"}];
+
+// ─── MICRO UI ─────────────────────────────────────────────────────────────────
+const Lbl=({c})=><div style={{fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:T.g400,marginBottom:8}}>{c}</div>;
+const Card=({ch,s={}})=><div style={{background:T.white,borderRadius:12,border:`1px solid ${T.g200}`,padding:16,marginBottom:12,...s}}>{ch}</div>;
+const Tag=({col="blue",ch})=>{const m={blue:{bg:T.blueL,c:T.blue},green:{bg:T.greenL,c:T.green},orange:{bg:T.orangeL,c:T.orange},red:{bg:T.redL,c:T.red}};return<span style={{display:"inline-block",padding:"3px 10px",borderRadius:6,fontSize:11,fontWeight:600,background:m[col].bg,color:m[col].c}}>{ch}</span>;};
+const Pill=({active,onClick,ch})=><button onClick={onClick} style={{padding:"8px 14px",borderRadius:20,fontSize:13,cursor:"pointer",fontWeight:active?700:400,border:`1.5px solid ${active?T.blue:T.g200}`,background:active?T.blue:T.white,color:active?T.white:T.g500,transition:"all .15s"}}>{ch}</button>;
+const YesNo=({val,onChange,yes="Ano",no="Ne"})=><div style={{display:"flex",gap:10}}>{[true,false].map(v=><button key={String(v)} onClick={()=>onChange(v)} style={{flex:1,padding:"11px",borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,border:`1.5px solid ${val===v?T.blue:T.g200}`,background:val===v?T.blue:T.white,color:val===v?T.white:T.g500,transition:"all .15s"}}>{v?yes:no}</button>)}</div>;
+const Inp=({lbl,ph,val,onChange,type="text"})=><div style={{marginBottom:12}}>{lbl&&<div style={{fontSize:13,fontWeight:600,color:T.g700,marginBottom:6}}>{lbl}</div>}<input type={type} value={val} onChange={e=>onChange(e.target.value)} placeholder={ph} style={{width:"100%",padding:"10px 14px",borderRadius:10,fontSize:13,border:`1.5px solid ${T.g200}`,outline:"none",boxSizing:"border-box",background:T.g50,color:T.g900,fontFamily:"inherit"}}/></div>;
+
+const FadeIn=({ch,k})=>{const [op,setOp]=useState(0);useEffect(()=>{const t=setTimeout(()=>setOp(1),20);return()=>clearTimeout(t);},[]);return<div style={{opacity:op,transform:op?"translateY(0)":"translateY(8px)",transition:"opacity .25s ease,transform .25s ease"}}>{ch}</div>;};
+
+// ─── CHECK BOX ITEM ───────────────────────────────────────────────────────────
+const ChkItem=({done,onToggle,label,tip,color=T.blue})=>(
+  <div style={{borderBottom:`1px solid ${T.g100}`,paddingBottom:10,marginBottom:10}}>
+    <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+      <div onClick={onToggle} style={{width:20,height:20,borderRadius:5,border:`1.5px solid ${done?color:T.g300}`,background:done?color:T.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,cursor:"pointer"}}>
+        {done&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>}
+      </div>
+      <div>
+        <div style={{fontSize:13,fontWeight:500,color:done?T.g400:T.g700,textDecoration:done?"line-through":"none"}}>{label}</div>
+        {tip&&<div style={{fontSize:11,color:T.orange,marginTop:3}}>💡 {tip}</div>}
+      </div>
+    </label>
+  </div>
+);
+
+// ─── PROGRESS BAR ─────────────────────────────────────────────────────────────
+const ProgBar=({steps,cur})=>(
+  <div style={{background:T.white,padding:"10px 16px 12px",borderBottom:`1px solid ${T.g200}`}}>
+    <div style={{display:"flex",alignItems:"center"}}>
+      {steps.map((s,i)=>(
+        <div key={i} style={{display:"flex",alignItems:"center",flex:i<steps.length-1?1:"none"}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+            <div style={{width:24,height:24,borderRadius:12,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",background:cur>i?T.green:cur===i?T.blue:T.g200,color:cur>=i?T.white:T.g400,transition:"background .3s"}}>
+              {cur>i?<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>:i+1}
+            </div>
+            <div style={{fontSize:8,color:cur===i?T.blue:T.g400,fontWeight:cur===i?700:400,whiteSpace:"nowrap"}}>{s}</div>
+          </div>
+          {i<steps.length-1&&<div style={{flex:1,height:2,margin:"0 4px",marginBottom:14,background:cur>i?T.green:T.g200,transition:"background .3s"}}/>}
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+// ─── EMERGENCY ALERT ──────────────────────────────────────────────────────────
+const EmAlert=({onDismiss})=>(
+  <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.55)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+    <div style={{background:T.white,borderRadius:14,padding:24,border:`2px solid ${T.red}`,width:"100%"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <div style={{width:42,height:42,borderRadius:21,background:T.redL,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </div>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:T.red}}>Možná závažná situace</div>
+          <div style={{fontSize:12,color:T.g500}}>AI detekovala kritický příznak</div>
+        </div>
+      </div>
+      <p style={{fontSize:13,color:T.g700,lineHeight:1.6,margin:"0 0 14px"}}>Váš příznak může vyžadovat <strong>okamžitou lékařskou pomoc</strong>. Nečekejte na objednání.</p>
+      <div style={{background:T.redL,borderRadius:10,padding:12,marginBottom:14,textAlign:"center"}}>
+        <div style={{fontSize:12,fontWeight:600,color:"#991B1B"}}>Tísňová linka</div>
+        <div style={{fontSize:22,fontWeight:700,color:T.red}}>Volejte 155 nebo 112</div>
+      </div>
+      <button onClick={onDismiss} style={{width:"100%",padding:"12px",borderRadius:10,border:`1.5px solid ${T.g200}`,background:T.white,color:T.g500,fontWeight:700,fontSize:13,cursor:"pointer"}}>Mé příznaky nejsou naléhavé — pokračovat</button>
+    </div>
+  </div>
+);
+
+// ─── OLD CARTS FORM ───────────────────────────────────────────────────────────
+const OldCarts=({data,onChange,showAlert,setShowAlert})=>{
+  const tog=(f,v)=>onChange({...data,[f]:(data[f]||[]).includes(v)?(data[f]||[]).filter(x=>x!==v):[...(data[f]||[]),v]});
+  const chk=v=>{if(checkEmerg(v))setShowAlert(true);};
+  return(
+    <div>
+      {showAlert&&<EmAlert onDismiss={()=>setShowAlert(false)}/>}
+      {/* Main symptom */}
+      <div style={{background:T.blueL,border:`1px solid #BFDBFE`,borderRadius:12,padding:14,marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <div style={{width:4,height:24,borderRadius:2,background:T.blue,flexShrink:0}}/>
+          <div><div style={{fontSize:14,fontWeight:700,color:T.blue}}>OLD CARTS – standardizovaný dotazník</div><div style={{fontSize:11,color:T.g500}}>Popište příznaky přesně</div></div>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:600,color:T.g700,marginBottom:4}}>Hlavní příznak (Onset)</div>
+          <input value={data.onset||""} onChange={e=>{onChange({...data,onset:e.target.value});chk(e.target.value);}} placeholder="Co vás trápí? (např. bolest na hrudi)" style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,outline:"none",background:T.white,boxSizing:"border-box"}}/>
+        </div>
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:12,fontWeight:600,color:T.g700,marginBottom:4}}>Kdy začalo? (Onset)</div>
+          <input value={data.onsetTime||""} onChange={e=>onChange({...data,onsetTime:e.target.value})} placeholder="např. dnes ráno, před 3 dny" style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,outline:"none",background:T.white,boxSizing:"border-box"}}/>
+        </div>
+      </div>
+      {/* Duration */}
+      <Card ch={<>
+        <Lbl c="Délka trvání (Duration)"/>
+        <input type="range" min={0} max={4} step={1} value={data.duration??0} onChange={e=>onChange({...data,duration:Number(e.target.value)})} style={{width:"100%",accentColor:T.blue,cursor:"pointer"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+          {DUR.map((d,i)=><span key={i} style={{fontSize:9,color:data.duration===i?T.blue:T.g400,fontWeight:data.duration===i?700:400,textAlign:"center",flex:1}}>{d.l}</span>)}
+        </div>
+        <div style={{textAlign:"center",marginTop:6,fontSize:13,fontWeight:700,color:T.blue}}>{DUR[data.duration??0]?.l}</div>
+      </>}/>
+      {/* Location */}
+      <Card ch={<>
+        <Lbl c="Lokalizace (Location)"/>
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          {BODY_LOCS.map(loc=>(
+            <label key={loc} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",borderRadius:8,cursor:"pointer",background:(data.locations||[]).includes(loc)?T.blueL:"transparent",transition:"background .1s"}}>
+              <div onClick={()=>tog("locations",loc)} style={{width:18,height:18,borderRadius:4,flexShrink:0,border:`1.5px solid ${(data.locations||[]).includes(loc)?T.blue:T.g300}`,background:(data.locations||[]).includes(loc)?T.blue:T.white,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                {(data.locations||[]).includes(loc)&&<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>}
+              </div>
+              <span style={{fontSize:13,color:T.g700}}>{loc}</span>
+            </label>
+          ))}
+        </div>
+      </>}/>
+      {/* Severity */}
+      <Card ch={<>
+        <Lbl c="Intenzita bolesti – Severity (1–10)"/>
+        <div style={{display:"flex",gap:4,justifyContent:"space-between",marginBottom:8}}>
+          {[1,2,3,4,5,6,7,8,9,10].map(n=>{
+            const cs=["#22A06B","#22A06B","#22A06B","#84CC16","#F59E0B","#F97316","#F97316","#EF4444","#DC2626","#B91C1C"];
+            const a=data.severity===n;
+            return<div key={n} onClick={()=>onChange({...data,severity:n})} style={{flex:1,aspectRatio:"1",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,cursor:"pointer",background:a?cs[n-1]:T.g100,color:a?T.white:T.g400,border:a?`2px solid ${cs[n-1]}`:`1px solid ${T.g200}`,transition:"all .1s"}}>{n}</div>;
+          })}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between"}}>
+          <span style={{fontSize:10,color:T.green,fontWeight:600}}>Bez bolesti</span>
+          <span style={{fontSize:10,color:T.red,fontWeight:600}}>Nejhorší bolest</span>
+        </div>
+      </>}/>
+      {/* Character */}
+      <Card ch={<>
+        <Lbl c="Charakter (Character)"/>
+        <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+          {CHARS.map(o=><Pill key={o.v} active={(data.character||[]).includes(o.v)} onClick={()=>tog("character",o.v)} ch={o.l}/>)}
+        </div>
+      </>}/>
+      {/* Aggravating / Relieving */}
+      <Card ch={<>
+        <Lbl c="Spouštěče a úlevné faktory"/>
+        <div style={{fontSize:12,fontWeight:600,color:T.g700,marginBottom:6}}>Zhoršující faktory</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+          {["Pohyb","Sezení","Stání","Jídlo","Stres","Chlad","Teplo","Dech"].map(c=><Pill key={c} active={(data.aggravating||[]).includes(c)} onClick={()=>tog("aggravating",c)} ch={c}/>)}
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:T.g700,marginBottom:6}}>Úlevné faktory</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
+          {["Klid","Led","Teplo","Léky","Elevace","Masáž","Poloha"].map(c=><Pill key={c} active={(data.relieving||[]).includes(c)} onClick={()=>tog("relieving",c)} ch={c}/>)}
+        </div>
+        <div style={{fontSize:12,fontWeight:600,color:T.g700,marginBottom:4}}>Volný popis spouštěčů</div>
+        <textarea value={data.triggers||""} onChange={e=>onChange({...data,triggers:e.target.value})} placeholder="Cokoliv, co příznaky zhoršuje nebo spouští…" style={{width:"100%",minHeight:64,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,resize:"none",outline:"none",background:T.g50,boxSizing:"border-box",lineHeight:1.5}}/>
+      </>}/>
+      {/* Treatment so far */}
+      <Card ch={<>
+        <Lbl c="Dosavadní léčba (Treatment)"/>
+        <textarea value={data.treatment||""} onChange={e=>onChange({...data,treatment:e.target.value})} placeholder="Vyzkoušeli jste něco? (např. Ibuprofen 400mg, led, klid…)" style={{width:"100%",minHeight:60,padding:"10px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,resize:"none",outline:"none",background:T.g50,boxSizing:"border-box",lineHeight:1.5}}/>
+      </>}/>
+    </div>
+  );
+};
+
+// ─── MEDICAL HISTORY FORM ─────────────────────────────────────────────────────
+const MedHistory=({data,onChange})=>{
+  const [newCond,setNewCond]=useState(""),[newAllergy,setNewAllergy]=useState("");
+  return(
+    <div>
+      <Card ch={<>
+        <Lbl c="Chronická onemocnění"/>
+        {(data.conditions||PATIENT.conditions).map((c,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.g100}`}}>
+            <span style={{fontSize:13,color:T.g700}}>{c}</span>
+            <Tag col="blue" ch="ze záznamu"/>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <input value={newCond} onChange={e=>setNewCond(e.target.value)} onKeyDown={e=>e.key==="Enter"&&newCond.trim()&&(onChange({...data,conditions:[...(data.conditions||PATIENT.conditions),newCond.trim()]}),setNewCond(""))} placeholder="Přidat onemocnění…" style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,outline:"none",background:T.g50}}/>
+          <button onClick={()=>{if(newCond.trim()){onChange({...data,conditions:[...(data.conditions||PATIENT.conditions),newCond.trim()]});setNewCond("");}}} style={{padding:"8px 14px",borderRadius:8,background:T.blue,border:"none",color:T.white,fontWeight:700,cursor:"pointer"}}>+</button>
+        </div>
+      </>}/>
+      <Card ch={<>
+        <Lbl c="Alergie"/>
+        {(data.allergies||PATIENT.allergies).map((a,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.g100}`}}>
+            <span style={{fontSize:13,fontWeight:600,color:T.g700}}>{a}</span>
+            <Tag col="orange" ch="⚠ alergie"/>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <input value={newAllergy} onChange={e=>setNewAllergy(e.target.value)} onKeyDown={e=>e.key==="Enter"&&newAllergy.trim()&&(onChange({...data,allergies:[...(data.allergies||PATIENT.allergies),newAllergy.trim()]}),setNewAllergy(""))} placeholder="Přidat alergii…" style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,outline:"none",background:T.g50}}/>
+          <button onClick={()=>{if(newAllergy.trim()){onChange({...data,allergies:[...(data.allergies||PATIENT.allergies),newAllergy.trim()]});setNewAllergy("");}}} style={{padding:"8px 14px",borderRadius:8,background:T.red,border:"none",color:T.white,fontWeight:700,cursor:"pointer"}}>+</button>
+        </div>
+      </>}/>
+      <Card ch={<>
+        <Lbl c="Aktuální medikace"/>
+        {PATIENT.meds.map((m,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.g100}`}}>
+            <div><div style={{fontSize:13,fontWeight:600,color:T.g700}}>{m.name}</div><div style={{fontSize:11,color:T.g400}}>{m.freq}</div></div>
+            <Tag col="green" ch="✓ potvrzeno"/>
+          </div>
+        ))}
+        {(data.newMeds||[]).map((m,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${T.g100}`}}>
+            <span style={{fontSize:13,color:T.g700}}>{m}</span>
+            <span onClick={()=>onChange({...data,newMeds:(data.newMeds||[]).filter((_,j)=>j!==i)})} style={{fontSize:11,color:T.red,fontWeight:700,cursor:"pointer"}}>Odebrat</span>
+          </div>
+        ))}
+        <div style={{display:"flex",gap:8,marginTop:10}}>
+          <input placeholder="Přidat nový lék…" id="newMedInp" style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1.5px solid ${T.g200}`,fontSize:13,outline:"none",background:T.g50}}
+            onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){onChange({...data,newMeds:[...(data.newMeds||[]),e.target.value.trim()]});e.target.value="";}}}/>
+          <button onClick={()=>{const el=document.getElementById("newMedInp");if(el&&el.value.trim()){onChange({...data,newMeds:[...(data.newMeds||[]),el.value.trim()]});el.value="";}}} style={{padding:"8px 14px",borderRadius:8,background:T.blue,border:"none",color:T.white,fontWeight:700,cursor:"pointer"}}>+</button>
+        </div>
+      </>}/>
+    </div>
+  );
+};
+
+// ─── CHECKLIST BUILDER ────────────────────────────────────────────────────────
+const ChecklistPanel=({visitType,age,checklist,setChecklist})=>{
+  const tog=k=>setChecklist(c=>({...c,[k]:!c[k]}));
+  const baseItems=[
+    {k:"insurance",label:"🪪 Průkaz pojištěnce / OP"},
+    {k:"extReports",label:"📄 Zprávy od specialistů (jsou-li k dispozici)"},
+    {k:"vaccCard",label:"💉 Očkovací průkaz"},
+  ];
+  const sampleItems=[
+    {k:"urine",label:"🧪 Ranní moč – první ranní vzorek",tip:"Použijte sterilní nádobu z lékárny. Odeberete středový proud.",color:T.blue},
+    ...(age>50?[{k:"stool",label:"🟤 Vzorek stolice",tip:"Screening kolorektálního karcinomu (věk > 50 let).",color:T.orange}]:[]),
+  ];
+  const fastItems=[
+    {k:"fasting8h",label:"⏰ Nejíst min. 8 hodin před odběrem"},
+    {k:"waterOnly",label:"💧 Jen čistá voda (bez čaje, kávy, džusu)"},
+  ];
+  const surgeryItems=[
+    {k:"showerEvening",label:"🚿 Sprcha večer před operací"},
+    {k:"noNailPolish",label:"💅 Odstranit lak na nehtech"},
+    {k:"noJewelry",label:"💍 Sundat šperky a piercing"},
+    {k:"fastSurgery",label:"🍽️ Nalačno od půlnoci"},
+    {k:"consentReview",label:"📋 Prostudovat informovaný souhlas"},
+  ];
+  const consentItems=[
+    {k:"consentSigned",label:"✍️ Podepsat informovaný souhlas s operací"},
+    {k:"anesthConsent",label:"✍️ Souhlas s anestezií"},
+  ];
+  return(
+    <div>
+      {/* Samples — for all except surgery */}
+      {visitType!=="surgery"&&<Card ch={<>
+        <Lbl c="Vzorky"/>
+        {sampleItems.map(it=><ChkItem key={it.k} done={!!checklist[it.k]} onToggle={()=>tog(it.k)} label={it.label} tip={it.tip} color={it.color||T.blue}/>)}
+        {sampleItems.length===0&&<div style={{fontSize:13,color:T.g400}}>Žádné vzorky vyžadovány.</div>}
+      </>}/>}
+      {/* Fasting — not surgery (surgery has own) */}
+      {visitType!=="surgery"&&<Card ch={<>
+        <Lbl c="Příprava — nalačno"/>
+        {fastItems.map(it=><ChkItem key={it.k} done={!!checklist[it.k]} onToggle={()=>tog(it.k)} label={it.label}/>)}
+      </>}/>}
+      {/* Surgery prep */}
+      {visitType==="surgery"&&<>
+        <Card ch={<>
+          <Lbl c="Příprava před operací"/>
+          {surgeryItems.map(it=><ChkItem key={it.k} done={!!checklist[it.k]} onToggle={()=>tog(it.k)} label={it.label}/>)}
+        </>}/>
+        <Card ch={<>
+          <Lbl c="Informované souhlasy"/>
+          {consentItems.map(it=><ChkItem key={it.k} done={!!checklist[it.k]} onToggle={()=>tog(it.k)} label={it.label} color={T.red}/>)}
+        </>}/>
+      </>}
+      {/* Documents */}
+      <Card ch={<>
+        <Lbl c="Dokumenty"/>
+        {baseItems.map(it=><ChkItem key={it.k} done={!!checklist[it.k]} onToggle={()=>tog(it.k)} label={it.label}/>)}
+        {age<18&&<ChkItem key="childBook" done={!!checklist.childBook} onToggle={()=>tog("childBook")} label="📗 Zdravotní knížka dítěte"/>}
+        {visitType==="vaccination"&&<ChkItem key="vaccBook" done={!!checklist.vaccBook} onToggle={()=>tog("vaccBook")} label="💉 Očkovací průkaz ke doplnění záznamu"/>}
+      </>}/>
+    </div>
+  );
+};
+
+// ─── HANDOVER SUMMARY ────────────────────────────────────────────────────────
+const HandoverSummary=({payload})=>{
+  const {visitType,symptom,history,newSymptom,checklist}=payload;
+  const vLabel=VISIT_TYPES.find(v=>v.key===visitType)?.label||visitType;
+  const doneCount=Object.values(checklist||{}).filter(Boolean).length;
+  const totalCount=Object.keys(checklist||{}).length;
+  return(
+    <div>
+      <div style={{background:T.greenL,border:`1px solid #6EE7B7`,borderRadius:12,padding:16,marginBottom:12}}>
+        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={T.green} strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
+          <div><div style={{fontSize:14,fontWeight:700,color:T.green}}>Předávací zpráva odeslána</div><div style={{fontSize:12,color:T.g500}}>{PATIENT.doctor} · dnes</div></div>
+          <div style={{marginLeft:"auto"}}><Tag col="green" ch="✓ Odesláno"/></div>
+        </div>
+      </div>
+      {/* Visit type */}
+      <Card ch={<>
+        <Lbl c="Typ návštěvy"/>
+        <div style={{fontSize:14,fontWeight:700,color:T.g900}}>{vLabel}</div>
+      </>}/>
+      {/* OLD CARTS summary */}
+      {symptom&&symptom.onset&&<Card ch={<>
+        <Lbl c="Příznaky – OLD CARTS"/>
+        {[["Příznak",symptom.onset],["Vznik",symptom.onsetTime],["Trvání",DUR[symptom.duration??0]?.l],["Lokalizace",(symptom.locations||[]).join(", ")],["Intenzita",symptom.severity?`${symptom.severity}/10`:null],["Charakter",(symptom.character||[]).map(v=>CHARS.find(c=>c.v===v)?.l).join(", ")],["Zhoršující",(symptom.aggravating||[]).join(", ")],["Úlevné",(symptom.relieving||[]).join(", ")],["Léčba",symptom.treatment]].filter(([,v])=>v&&v.length>0).map(([k,v])=>(
+          <div key={k} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.g100}`}}>
+            <span style={{fontSize:12,color:T.g400,fontWeight:600,minWidth:80}}>{k}</span>
+            <span style={{fontSize:13,color:k==="Intenzita"&&parseInt(v)>=8?T.red:T.g700,fontWeight:k==="Intenzita"&&parseInt(v)>=8?700:400}}>{v}</span>
+          </div>
+        ))}
+      </>}/>}
+      {/* New symptom in routine */}
+      {newSymptom&&newSymptom.onset&&<Card ch={<>
+        <Lbl c="Nový příznak (v rámci prohlídky)"/>
+        {[["Příznak",newSymptom.onset],["Trvání",DUR[newSymptom.duration??0]?.l],["Intenzita",newSymptom.severity?`${newSymptom.severity}/10`:null]].filter(([,v])=>v).map(([k,v])=>(
+          <div key={k} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.g100}`}}>
+            <span style={{fontSize:12,color:T.g400,fontWeight:600,minWidth:80}}>{k}</span>
+            <span style={{fontSize:13,color:T.g700}}>{v}</span>
+          </div>
+        ))}
+      </>}/>}
+      {/* History */}
+      <Card ch={<>
+        <Lbl c="Anamnéza"/>
+        <div style={{padding:"5px 0",borderBottom:`1px solid ${T.g100}`}}>
+          <span style={{fontSize:12,color:T.g400,fontWeight:600}}>Onemocnění: </span>
+          <span style={{fontSize:13,color:T.g700}}>{(history?.conditions||PATIENT.conditions).join(", ")||"—"}</span>
+        </div>
+        <div style={{padding:"5px 0",borderBottom:`1px solid ${T.g100}`}}>
+          <span style={{fontSize:12,color:T.g400,fontWeight:600}}>Alergie: </span>
+          <span style={{fontSize:13,color:T.orange,fontWeight:600}}>{(history?.allergies||PATIENT.allergies).join(", ")||"—"}</span>
+        </div>
+        <div style={{padding:"5px 0"}}>
+          <span style={{fontSize:12,color:T.g400,fontWeight:600}}>Medikace: </span>
+          <span style={{fontSize:13,color:T.g700}}>{[...PATIENT.meds.map(m=>m.name),...(history?.newMeds||[])].join(", ")||"—"}</span>
+        </div>
+      </>}/>
+      {/* Checklist */}
+      {totalCount>0&&<Card ch={<>
+        <Lbl c="Checklist pacienta"/>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{height:6,flex:1,background:T.g200,borderRadius:3}}>
+            <div style={{height:"100%",background:doneCount===totalCount?T.green:T.blue,borderRadius:3,width:`${Math.round(doneCount/totalCount*100)}%`,transition:"width .3s"}}/>
+          </div>
+          <span style={{fontSize:12,fontWeight:700,color:doneCount===totalCount?T.green:T.blue}}>{doneCount}/{totalCount}</span>
+        </div>
+      </>}/>}
+      {/* Surgery consent notice */}
+      {visitType==="surgery"&&<div style={{background:"#FEF3C7",border:`1px solid #FDE68A`,borderRadius:12,padding:14,marginBottom:12}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.orange,marginBottom:4}}>📋 Informované souhlasy</div>
+        <div style={{fontSize:12,color:T.g700,lineHeight:1.5}}>Prosím dostavte se na recepci podepsat informovaný souhlas s operací a anestezií.</div>
+      </div>}
+    </div>
+  );
+};
+
+// ─── HEALTH CHECK (vaccination / pre-surgery / surgery) ───────────────────────
+const HealthCheck=({data,onChange})=>(
+  <div>
+    <Card ch={<>
+      <Lbl c="Celkový zdravotní stav"/>
+      <div style={{fontSize:13,color:T.g700,marginBottom:10}}>Jak se dnes cítíte?</div>
+      <div style={{display:"flex",gap:8}}>
+        {["Dobře","Normálně","Špatně"].map(s=>(
+          <button key={s} onClick={()=>onChange({...data,generalFeeling:s})} style={{flex:1,padding:"10px 6px",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer",border:`1.5px solid ${data.generalFeeling===s?T.blue:T.g200}`,background:data.generalFeeling===s?T.blue:T.white,color:data.generalFeeling===s?T.white:T.g500}}>{s}</button>
+        ))}
+      </div>
+    </>}/>
+    <Card ch={<>
+      <Lbl c="Akutní onemocnění"/>
+      <div style={{fontSize:13,color:T.g700,marginBottom:8}}>Máte aktuálně horečku, rýmu nebo akutní infekci?</div>
+      <YesNo val={data.acuteIllness} onChange={v=>onChange({...data,acuteIllness:v})}/>
+      {data.acuteIllness&&<div style={{marginTop:10,background:T.orangeL,borderRadius:8,padding:10}}><div style={{fontSize:12,color:T.orange,fontWeight:600}}>⚠️ Informujte prosím sestru před aplikací vakcíny / zahájením operace.</div></div>}
+    </>}/>
+    <Card ch={<>
+      <Lbl c="Alergická reakce na vakcínu / léky v minulosti?"/>
+      <YesNo val={data.priorReaction} onChange={v=>onChange({...data,priorReaction:v})}/>
+      {data.priorReaction&&<Inp lbl="" ph="Jaká vakcína/lék, jaká reakce?" val={data.priorReactionDetail||""} onChange={v=>onChange({...data,priorReactionDetail:v})}/>}
+    </>}/>
+  </div>
+);
+
+// ─── FLOW: PAIN / URGENT ──────────────────────────────────────────────────────
+const FlowPain=({onDone})=>{
+  const STEPS=["Příznaky","Anamnéza","Souhrn"];
+  const [step,setStep]=useState(0);
+  const [symptom,setSymptom]=useState({duration:0});
+  const [history,setHistory]=useState({});
+  const [alert,setAlert]=useState(false);
+  const payload={visitType:"pain",symptom,history,checklist:{}};
+  return(
+    <div>
+      <ProgBar steps={STEPS} cur={step}/>
+      <div style={{padding:16,paddingBottom:80}}>
+        <FadeIn key={step} ch={
+          step===0?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Popis příznaků</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>OLD CARTS – standardizovaný klinický dotazník</div>
+            <OldCarts data={symptom} onChange={setSymptom} showAlert={alert} setShowAlert={setAlert}/>
+          </div>:
+          step===1?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Anamnéza</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Zkontrolujte a doplňte zdravotní historii.</div>
+            <MedHistory data={history} onChange={setHistory}/>
+          </div>:
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Souhrn & předání</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Zpráva připravena pro lékaře.</div>
+            <HandoverSummary payload={payload}/>
+          </div>
+        }/>
+      </div>
+      <NavBar step={step} total={STEPS.length} onBack={()=>setStep(s=>s-1)} onNext={()=>step<STEPS.length-1?setStep(s=>s+1):onDone(payload)}/>
+    </div>
+  );
+};
+
+// ─── FLOW: ROUTINE ────────────────────────────────────────────────────────────
+const FlowRoutine=({onDone})=>{
+  const STEPS=["Přivítání","Anamnéza","Nový příznak?","Checklist","Souhrn"];
+  const [step,setStep]=useState(0);
+  const [history,setHistory]=useState({});
+  const [hasNew,setHasNew]=useState(null);
+  const [newSymptom,setNewSymptom]=useState({duration:0});
+  const [checklist,setChecklist]=useState({});
+  const [alert,setAlert]=useState(false);
+  const payload={visitType:"routine",history,newSymptom:hasNew?newSymptom:null,checklist};
+  return(
+    <div>
+      <ProgBar steps={STEPS} cur={step}/>
+      <div style={{padding:16,paddingBottom:80}}>
+        <FadeIn key={step} ch={
+          step===0?<div>
+            <div style={{background:T.blueL,border:`1px solid #BFDBFE`,borderRadius:12,padding:16,marginBottom:14}}>
+              <div style={{fontSize:18,fontWeight:700,color:T.g900,marginBottom:4}}>Vítejte zpět, {PATIENT.name}! 👋</div>
+              <div style={{fontSize:13,color:T.g500,lineHeight:1.6}}>Připravujeme se na prohlídku u <strong>{PATIENT.doctor}</strong>.</div>
+              <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                <Tag col="blue" ch={`Poslední návštěva: ${PATIENT.lastVisit}`}/>
+                <Tag col="orange" ch={`Věk: ${PATIENT.age} let`}/>
+              </div>
+            </div>
+            <div style={{fontSize:13,color:T.g700,lineHeight:1.6}}>Průvodce vám pomůže efektivně připravit podklady pro lékaře. Vyplnění trvá přibližně <strong>3–5 minut</strong>.</div>
+          </div>:
+          step===1?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Anamnéza a medikace</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Zkontrolujte a případně doplňte záznamy.</div>
+            <MedHistory data={history} onChange={setHistory}/>
+          </div>:
+          step===2?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Nový příznak?</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Máte od poslední návštěvy nový nebo zhoršující se příznak?</div>
+            <div style={{background:T.white,borderRadius:12,border:`1px solid ${T.g200}`,padding:16,marginBottom:12}}>
+              <YesNo val={hasNew} onChange={setHasNew} yes="Ano, mám nový příznak" no="Ne, cítím se stabilně"/>
+            </div>
+            {hasNew===true&&<div style={{marginTop:4}}>
+              {alert&&<EmAlert onDismiss={()=>setAlert(false)}/>}
+              <div style={{fontSize:14,fontWeight:700,color:T.blue,marginBottom:10}}>Popište příznak</div>
+              <OldCarts data={newSymptom} onChange={setNewSymptom} showAlert={alert} setShowAlert={setAlert}/>
+            </div>}
+            {hasNew===false&&<div style={{background:T.greenL,border:`1px solid #6EE7B7`,borderRadius:12,padding:14}}>
+              <div style={{fontSize:13,fontWeight:600,color:T.green}}>✓ Žádné nové příznaky. Skvělé!</div>
+            </div>}
+          </div>:
+          step===3?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Nezapomeňte</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Zkontrolujte, co si vzít s sebou.</div>
+            <ChecklistPanel visitType="routine" age={PATIENT.age} checklist={checklist} setChecklist={setChecklist}/>
+          </div>:
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Souhrn & předání</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Zpráva připravena pro lékaře.</div>
+            <HandoverSummary payload={payload}/>
+          </div>
+        }/>
+      </div>
+      <NavBar step={step} total={STEPS.length} onBack={()=>setStep(s=>s-1)} onNext={()=>step<STEPS.length-1?setStep(s=>s+1):onDone(payload)} disableNext={step===2&&hasNew===null}/>
+    </div>
+  );
+};
+
+// ─── FLOW: VACCINATION ────────────────────────────────────────────────────────
+const FlowVaccination=({onDone})=>{
+  const STEPS=["Checklist","Zdravotní stav","Souhrn"];
+  const [step,setStep]=useState(0);
+  const [checklist,setChecklist]=useState({});
+  const [health,setHealth]=useState({});
+  const payload={visitType:"vaccination",health,checklist};
+  return(
+    <div>
+      <ProgBar steps={STEPS} cur={step}/>
+      <div style={{padding:16,paddingBottom:80}}>
+        <FadeIn key={step} ch={
+          step===0?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Příprava na očkování</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Co si vzít s sebou.</div>
+            <ChecklistPanel visitType="vaccination" age={PATIENT.age} checklist={checklist} setChecklist={setChecklist}/>
+          </div>:
+          step===1?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Kontrola zdravotního stavu</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Před aplikací vakcíny.</div>
+            <HealthCheck data={health} onChange={setHealth}/>
+          </div>:
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Souhrn</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Připraveno pro sestru.</div>
+            <HandoverSummary payload={payload}/>
+          </div>
+        }/>
+      </div>
+      <NavBar step={step} total={STEPS.length} onBack={()=>setStep(s=>s-1)} onNext={()=>step<STEPS.length-1?setStep(s=>s+1):onDone(payload)}/>
+    </div>
+  );
+};
+
+// ─── FLOW: PRE-SURGERY ────────────────────────────────────────────────────────
+const FlowPresurgery=({onDone})=>{
+  const STEPS=["Checklist","Zdravotní stav","Anamnéza","Souhrn"];
+  const [step,setStep]=useState(0);
+  const [checklist,setChecklist]=useState({});
+  const [health,setHealth]=useState({});
+  const [history,setHistory]=useState({});
+  const payload={visitType:"presurgery",health,history,checklist};
+  return(
+    <div>
+      <ProgBar steps={STEPS} cur={step}/>
+      <div style={{padding:16,paddingBottom:80}}>
+        <FadeIn key={step} ch={
+          step===0?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Příprava před operací</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Co si vzít a připravit.</div>
+            <ChecklistPanel visitType="presurgery" age={PATIENT.age} checklist={checklist} setChecklist={setChecklist}/>
+          </div>:
+          step===1?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Kontrola zdravotního stavu</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Před operačním výkonem.</div>
+            <HealthCheck data={health} onChange={setHealth}/>
+          </div>:
+          step===2?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Anamnéza & medikace</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Doplňte zdravotní historii.</div>
+            <MedHistory data={history} onChange={setHistory}/>
+          </div>:
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Souhrn</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Připraveno pro lékaře.</div>
+            <HandoverSummary payload={payload}/>
+          </div>
+        }/>
+      </div>
+      <NavBar step={step} total={STEPS.length} onBack={()=>setStep(s=>s-1)} onNext={()=>step<STEPS.length-1?setStep(s=>s+1):onDone(payload)}/>
+    </div>
+  );
+};
+
+// ─── FLOW: SURGERY CHECK-IN ───────────────────────────────────────────────────
+const FlowSurgery=({onDone})=>{
+  const STEPS=["Must-do list","Zdravotní stav","Souhlasy","Souhrn"];
+  const [step,setStep]=useState(0);
+  const [checklist,setChecklist]=useState({});
+  const [health,setHealth]=useState({});
+  const payload={visitType:"surgery",health,checklist};
+  return(
+    <div>
+      <ProgBar steps={STEPS} cur={step}/>
+      <div style={{padding:16,paddingBottom:80}}>
+        <FadeIn key={step} ch={
+          step===0?<div>
+            <div style={{background:"#FEF3C7",border:`1px solid #FDE68A`,borderRadius:12,padding:14,marginBottom:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.orange,marginBottom:4}}>🏥 Den operace</div>
+              <div style={{fontSize:13,color:T.g700,lineHeight:1.5}}>Prosím zkontrolujte všechny body na seznamu před vstupem na operační sál.</div>
+            </div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Must-do checklist</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Příprava před operací.</div>
+            <ChecklistPanel visitType="surgery" age={PATIENT.age} checklist={checklist} setChecklist={setChecklist}/>
+          </div>:
+          step===1?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Kontrola zdravotního stavu</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Bezprostředně před operací.</div>
+            <HealthCheck data={health} onChange={setHealth}/>
+          </div>:
+          step===2?<div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Informované souhlasy</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Prosím podepište souhlasy na recepci.</div>
+            <Card ch={<>
+              <div style={{padding:"12px 0",borderBottom:`1px solid ${T.g100}`}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.g900}}>Informovaný souhlas s operačním výkonem</div>
+                <div style={{fontSize:11,color:T.g400,marginTop:2}}>Dokument č. CM-OP-2025</div>
+              </div>
+              <div style={{padding:"12px 0"}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.g900}}>Souhlas s anestezií</div>
+                <div style={{fontSize:11,color:T.g400,marginTop:2}}>Dokument č. CM-AN-2025</div>
+              </div>
+              <div style={{background:T.orangeL,borderRadius:8,padding:10,marginTop:8}}>
+                <div style={{fontSize:12,color:T.orange,fontWeight:600}}>⚠️ Podpis probíhá osobně na recepci s zdravotní sestrou.</div>
+              </div>
+            </>}/>
+            <div style={{display:"flex",gap:10,marginTop:4}}>
+              {[{k:"consentSigned",l:"Souhlas s operací podepsán"},{k:"anesthConsent",l:"Souhlas s anestezií podepsán"}].map(it=>(
+                <button key={it.k} onClick={()=>setChecklist(c=>({...c,[it.k]:!c[it.k]}))} style={{flex:1,padding:"11px",borderRadius:10,border:`1.5px solid ${checklist[it.k]?T.green:T.g200}`,background:checklist[it.k]?T.greenL:T.white,color:checklist[it.k]?T.green:T.g500,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  {checklist[it.k]?"✓ "+it.l:it.l}
+                </button>
+              ))}
+            </div>
+          </div>:
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:T.g900,marginBottom:4}}>Souhrn – surgery check-in</div>
+            <div style={{fontSize:13,color:T.g500,marginBottom:14}}>Připraveno pro operační tým.</div>
+            <HandoverSummary payload={payload}/>
+          </div>
+        }/>
+      </div>
+      <NavBar step={step} total={STEPS.length} onBack={()=>setStep(s=>s-1)} onNext={()=>step<STEPS.length-1?setStep(s=>s+1):onDone(payload)}/>
+    </div>
+  );
+};
+
+// ─── NAV BAR ──────────────────────────────────────────────────────────────────
+const NavBar=({step,total,onBack,onNext,disableNext=false})=>(
+  <div style={{position:"fixed",bottom:64,left:"50%",transform:"translateX(-50%)",width:375,padding:"12px 16px",background:T.white,borderTop:`1px solid ${T.g200}`,display:"flex",gap:10,zIndex:50}}>
+    {step>0&&<button onClick={onBack} style={{flex:1,padding:"13px",borderRadius:10,border:`1.5px solid ${T.g200}`,background:T.white,color:T.g700,fontWeight:700,fontSize:14,cursor:"pointer"}}>← Zpět</button>}
+    <button onClick={onNext} disabled={disableNext} style={{flex:2,padding:"13px",borderRadius:10,border:"none",background:disableNext?T.g200:step===total-1?T.green:T.blue,color:disableNext?T.g400:T.white,fontWeight:700,fontSize:14,cursor:disableNext?"default":"pointer",transition:"background .15s"}}>
+      {step===total-1?"✓ Potvrdit příchod":"Pokračovat →"}
+    </button>
+  </div>
+);
+
+// ─── FEATURE B WRAPPER (used inside main app) ────────────────────────────────
+function FeatureB({onBack}){
+  const [visitType,setVisitType]=useState(null);
+  const [done,setDone]=useState(false);
+  const [payload,setPayload]=useState(null);
+
+  const handleDone=(p)=>{setPayload(p);setDone(true);};
+
+  // Bottom nav (mimics original app)
+  const Nav=()=>(
+    <div style={{position:"absolute",bottom:0,left:0,right:0,background:T.white,borderTop:`1px solid ${T.g200}`,display:"flex",alignItems:"center",justifyContent:"space-around",padding:"10px 0 14px",height:64}}>
+      {[["🏠","Události"],["♥","Moje zdraví"],null,["✉","Novinky"],["👤","Profil"]].map((item,i)=>
+        item===null
+          ?<button key="fab" style={{width:52,height:52,borderRadius:26,background:"#E8314A",border:"none",color:T.white,fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-18,boxShadow:"0 2px 8px rgba(232,49,74,.35)"}} onClick={()=>{setVisitType(null);setDone(false);}}>+</button>
+          :<div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,fontSize:10,fontWeight:i===1?700:400,color:i===1?"#E8314A":T.g400,cursor:"pointer"}}><span style={{fontSize:16}}>{item[0]}</span><span>{item[1]}</span></div>
+      )}
+    </div>
+  );
+
+  // Header
+  const Hdr=({showBack=true,title="Digitální sestra",sub="Příjem pacienta"})=>(
+    <div style={{background:T.white,padding:"10px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.g200}`}}>
+      {showBack?<div onClick={()=>{setVisitType(null);setDone(false);}} style={{cursor:"pointer",padding:"4px 8px 4px 0"}}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.blue} strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </div>:<div style={{width:28}}/>}
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.blue,letterSpacing:1.2,textTransform:"uppercase"}}>{title}</div>
+        <div style={{fontSize:10,color:T.g400}}>{sub}</div>
+      </div>
+      <div style={{width:28}}/>
+    </div>
+  );
+
+  if(done) return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <Hdr sub="Příjem dokončen"/>
+      <div style={{flex:1,overflowY:"auto",padding:24,paddingBottom:80,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center"}}>
+        <div style={{width:64,height:64,borderRadius:32,background:T.greenL,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:16}}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={T.green} strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>
+        </div>
+        <div style={{fontSize:20,fontWeight:700,color:T.g900,marginBottom:8}}>Příjem dokončen</div>
+        <div style={{fontSize:13,color:T.g500,lineHeight:1.6,marginBottom:24}}>Vaše informace byly předány<br/><strong>{PATIENT.doctor}</strong>.<br/>Prosím vyčkejte ve čekárně.</div>
+        <button onClick={onBack} style={{padding:"12px 32px",borderRadius:10,background:T.blue,border:"none",color:T.white,fontWeight:700,fontSize:14,cursor:"pointer"}}>Zpět na hlavní stránku</button>
+      </div>
+      <Nav/>
+    </div>
+  );
+
+  if(visitType) return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <Hdr/>
+      <div style={{flex:1,overflowY:"auto"}}>
+        {visitType==="pain"&&<FlowPain onDone={handleDone}/>}
+        {visitType==="routine"&&<FlowRoutine onDone={handleDone}/>}
+        {visitType==="vaccination"&&<FlowVaccination onDone={handleDone}/>}
+        {visitType==="presurgery"&&<FlowPresurgery onDone={handleDone}/>}
+        {visitType==="surgery"&&<FlowSurgery onDone={handleDone}/>}
+      </div>
+      <Nav/>
+    </div>
+  );
+
+  // Visit type selection
+  return(
+    <div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+      <Hdr showBack={true} sub="Vyberte typ návštěvy"/>
+      <div style={{flex:1,overflowY:"auto",padding:16,paddingBottom:80}}>
+        <div style={{background:T.blueL,border:`1px solid #BFDBFE`,borderRadius:12,padding:16,marginBottom:16}}>
+          <div style={{fontSize:15,fontWeight:700,color:T.blue}}>Dobré ráno, {PATIENT.name} 👋</div>
+          <div style={{fontSize:13,color:T.g500,marginTop:4,lineHeight:1.5}}>Vaše návštěva je naplánována dnes u <strong style={{color:T.blue}}>{PATIENT.doctor}</strong>. Vyplňte příjmový dotazník.</div>
+        </div>
+        <div style={{fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:T.g400,marginBottom:12}}>Typ návštěvy</div>
+        {VISIT_TYPES.map(vt=>(
+          <div key={vt.key} onClick={()=>setVisitType(vt.key)} style={{background:T.white,borderRadius:12,border:`1.5px solid ${T.g200}`,padding:"16px",marginBottom:10,cursor:"pointer",transition:"all .15s"}}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:24}}>{vt.icon}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,fontWeight:700,color:T.g900}}>{vt.label}</div>
+                <div style={{fontSize:12,color:T.g400,marginTop:2}}>{vt.desc}</div>
+              </div>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.blue} strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </div>
+        ))}
+        <div style={{marginTop:8,padding:14,background:T.redL,borderRadius:12,textAlign:"center"}}>
+          <div style={{fontSize:11,color:T.g500}}>Život ohrožující situace</div>
+          <div style={{fontSize:14,fontWeight:700,color:T.g900}}>Vždy volejte <span style={{color:"#E8314A"}}>112</span> nebo <span style={{color:"#E8314A"}}>155</span></div>
+        </div>
+      </div>
+      <Nav/>
+    </div>
+  );
+}
+
+// ─── MAIN APP (original home stays intact) ────────────────────────────────────
+const Tc={
   blue:"#1C3B8E",red:"#E8314A",bg:"#F4F6FA",white:"#FFFFFF",
   border:"#E8EAF2",text:"#1A1D2E",muted:"#6B7280",label:"#9CA3AF",
   green:"#22A06B",orange:"#D97706",redLight:"#FEE2E2",blueLight:"#EFF6FF",
 };
-
-const S={
-  phone:{width:375,minHeight:780,background:T.bg,borderRadius:36,border:"8px solid #111827",overflow:"hidden",position:"relative",fontFamily:"'Inter','Helvetica Neue',Arial,sans-serif",margin:"0 auto",display:"flex",flexDirection:"column"},
-  sb:{background:T.white,padding:"12px 20px 8px",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,fontWeight:600,color:T.text},
-  hdr:{background:T.white,padding:"10px 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.border}`},
-  ht:{fontSize:15,fontWeight:700,color:T.blue,letterSpacing:1.2,textTransform:"uppercase"},
-  sc:{flex:1,overflowY:"auto",padding:"16px",paddingBottom:90},
-  card:{background:T.white,borderRadius:10,border:`1px solid ${T.border}`,padding:"16px",marginBottom:12},
-  btnP:{width:"100%",padding:"14px",borderRadius:10,border:"none",background:T.blue,color:T.white,fontWeight:700,fontSize:15,cursor:"pointer"},
-  btnO:{width:"100%",padding:"13px",borderRadius:10,border:`1.5px solid ${T.blue}`,background:"transparent",color:T.blue,fontWeight:700,fontSize:14,cursor:"pointer"},
-  sl:{fontSize:11,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",marginBottom:10},
-  nav:{position:"absolute",bottom:0,left:0,right:0,background:T.white,borderTop:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-around",padding:"10px 0 14px",height:64},
-  ni:(a)=>({display:"flex",flexDirection:"column",alignItems:"center",gap:3,fontSize:10,fontWeight:a?700:400,color:a?T.red:T.muted,cursor:"pointer"}),
-  fab:{width:52,height:52,borderRadius:26,background:T.red,border:"none",color:T.white,fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-18,boxShadow:"0 2px 8px rgba(232,49,74,0.35)"},
-  chip:(a)=>({padding:"8px 14px",borderRadius:10,border:`1px solid ${a?T.blue:T.border}`,background:a?T.blue:T.white,color:a?T.white:T.muted,fontSize:13,fontWeight:a?700:400,cursor:"pointer"}),
-  tag:(c)=>({display:"inline-block",padding:"3px 9px",borderRadius:6,fontSize:11,fontWeight:600,background:c==="g"?"#D1FAE5":c==="o"?"#FEF3C7":c==="r"?T.redLight:T.blueLight,color:c==="g"?"#065F46":c==="o"?T.orange:c==="r"?T.red:T.blue}),
-};
-
-const Leaf=({size=22,color=T.red})=><svg width={size} height={size} viewBox="0 0 40 40" fill={color}><path d="M20 2 L22 12 L30 8 L26 16 L36 18 L28 22 L32 32 L22 26 L20 38 L18 26 L8 32 L12 22 L4 18 L14 16 L10 8 L18 12 Z"/></svg>;
-const PulseIcon=({size=30})=>(<div style={{width:size,height:size,borderRadius:size/2,background:T.blue,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width={size*.6} height={size*.6} viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="2.5" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>);
-const Back=({onClick})=>(<div onClick={onClick} style={{cursor:"pointer",padding:"4px 8px 4px 0"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.blue} strokeWidth="2.5" strokeLinecap="round"><path d="M15 18l-6-6 6-6"/></svg></div>);
-
-function TypingDots(){
-  const [f,setF]=useState(0);
-  useEffect(()=>{const t=setInterval(()=>setF(x=>(x+1)%4),400);return()=>clearInterval(t);},[]);
-  return <div style={{display:"flex",gap:4,padding:"2px 0"}}>{[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:f>i?T.blue:"#D1D5DB",transition:"background 0.15s"}}/>)}</div>;
-}
-
-function PDFChip({name,onRemove}){
-  return(<div style={{display:"inline-flex",alignItems:"center",gap:6,background:T.redLight,border:`1px solid #FECACA`,borderRadius:8,padding:"5px 10px",fontSize:12}}>
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>
-    <span style={{color:T.text,fontWeight:600,maxWidth:110,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.green} strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>
-    {onRemove&&<span onClick={onRemove} style={{cursor:"pointer",color:T.muted,fontSize:13,lineHeight:1}}>×</span>}
-  </div>);
-}
-
-function AIChat({onClose,context,uploadedDoc,initialPrompt,quickActions}){
-  const SYS=`You are a warm, empathetic AI health assistant for Canadian Medical clinic in Prague. ${context||""} ${uploadedDoc?`Patient uploaded: "${uploadedDoc}".`:""} Keep responses to 3–4 sentences. Bold the opening sentence. Never diagnose. For emergencies advise calling 155.`;
-  const [msgs,setMsgs]=useState([{role:"ai",text:"Hello! I'm your CM Assistant. How can I help you today?",ts:new Date()}]);
-  const [inp,setInp]=useState(initialPrompt||"");
-  const [loading,setLoading]=useState(false);
-  const [drag,setDrag]=useState(false);
-  const [doc,setDoc]=useState(uploadedDoc||null);
-  const ref=useRef(null);
-  const fref=useRef(null);
-  useEffect(()=>{if(ref.current)ref.current.scrollTop=ref.current.scrollHeight;},[msgs,loading]);
-  useEffect(()=>{if(initialPrompt)setTimeout(()=>send(initialPrompt),300);},[]);
-  const handleFile=f=>{if(!f)return;setDoc(f.name);setMsgs(m=>[...m,{role:"system",text:`Dokument nahrán: ${f.name}`,ts:new Date()}]);};
-  const onDrop=useCallback(e=>{e.preventDefault();setDrag(false);handleFile(e.dataTransfer.files[0]);},[]);
-  const send=async(override)=>{
-    const txt=(override||inp).trim();if(!txt||loading)return;
-    if(!override)setInp("");
-    setMsgs(m=>[...m,{role:"user",text:txt,ts:new Date()}]);setLoading(true);
-    try{
-      const hist=msgs.filter(m=>m.role!=="system").map(m=>({role:m.role==="ai"?"assistant":"user",content:m.text.replace(/\*\*/g,"")}));
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:SYS,messages:[...hist,{role:"user",content:txt}]})});
-      const d=await res.json();
-      setMsgs(m=>[...m,{role:"ai",text:d.content?.map(c=>c.text).join("")||"Zkuste to prosím znovu.",ts:new Date()}]);
-    }catch{setMsgs(m=>[...m,{role:"ai",text:"Chyba připojení.",ts:new Date()}]);}
-    setLoading(false);
-  };
-  const fmt=ts=>ts.toLocaleTimeString("cs-CZ",{hour:"2-digit",minute:"2-digit"});
-  return(
-    <div style={{display:"flex",flexDirection:"column",position:"absolute",inset:0,bottom:64,background:T.bg}}>
-      <div style={S.hdr}><Back onClick={onClose}/><div style={{display:"flex",flexDirection:"column",alignItems:"center"}}><span style={S.ht}>CM Asistent</span><div style={{display:"flex",alignItems:"center",gap:4,marginTop:1}}><div style={{width:6,height:6,borderRadius:3,background:T.green}}/><span style={{fontSize:10,color:T.muted}}>AI Online</span></div></div><div style={{width:20}}/></div>
-      {doc&&<div style={{background:"#FFFBEB",borderBottom:`1px solid #FDE68A`,padding:"7px 16px",display:"flex",alignItems:"center",gap:8}}><PDFChip name={doc}/><span style={{fontSize:11,color:T.orange,fontWeight:600}}>Aktivní kontext dokumentu</span></div>}
-      <div ref={ref} style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:12,minHeight:0}}>
-        {msgs.map((m,i)=>m.role==="system"?(
-          <div key={i} style={{display:"flex",justifyContent:"center"}}><div style={{background:"#D1FAE5",border:`1px solid #6EE7B7`,borderRadius:20,padding:"4px 12px",fontSize:11,color:"#065F46",display:"flex",alignItems:"center",gap:5}}><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="2.5"><polyline points="20,6 9,17 4,12"/></svg>{m.text}</div></div>
-        ):(
-          <div key={i} style={{display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8,alignItems:"flex-end"}}>
-            {m.role==="ai"?<PulseIcon size={30}/>:<div style={{width:30,height:30,borderRadius:15,background:T.border,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>}
-            <div style={{maxWidth:"76%"}}>
-              <div style={{padding:"10px 14px",borderRadius:m.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:m.role==="user"?T.blue:T.white,border:m.role==="ai"?`1px solid ${T.border}`:"none",color:m.role==="user"?T.white:T.text,fontSize:13.5,lineHeight:1.6}}>
-                {m.text.split(/\*\*(.*?)\*\*/).map((p,pi)=>pi%2===1?<strong key={pi}>{p}</strong>:<span key={pi}>{p}</span>)}
-              </div>
-              <div style={{fontSize:10,color:T.label,marginTop:3,textAlign:m.role==="user"?"right":"left",paddingLeft:m.role==="ai"?4:0}}>{m.role==="ai"&&"CM Asistent · "}{fmt(m.ts)}</div>
-            </div>
-          </div>
-        ))}
-        {loading&&<div style={{display:"flex",gap:8,alignItems:"flex-end"}}><PulseIcon size={30}/><div style={{background:T.white,border:`1px solid ${T.border}`,borderRadius:"14px 14px 14px 4px",padding:"10px 14px"}}><TypingDots/></div></div>}
-      </div>
-      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={onDrop} onClick={()=>fref.current?.click()} style={{margin:"0 16px 8px",border:`1.5px dashed ${drag?T.blue:T.border}`,borderRadius:10,padding:"8px 12px",background:drag?T.blueLight:"transparent",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={drag?T.blue:T.muted} strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        {doc?<><PDFChip name={doc}/><span style={{fontSize:11,color:T.muted}}>Nahradit</span></>:<span style={{fontSize:12,color:T.muted}}>Nahrát recept, sken nebo zprávu (PDF)</span>}
-        <input ref={fref} type="file" accept=".pdf,.jpg,.png" style={{display:"none"}} onChange={e=>handleFile(e.target.files[0])}/>
-      </div>
-      <div style={{paddingLeft:16,paddingBottom:6,display:"flex",gap:6,overflowX:"auto",scrollbarWidth:"none",flexShrink:0}}>
-        {(quickActions||[]).map(qa=><button key={qa.label} onClick={()=>send(qa.prompt)} style={{padding:"7px 13px",borderRadius:20,border:`1px solid ${T.border}`,background:T.white,fontSize:11,color:T.blue,cursor:"pointer",whiteSpace:"nowrap",fontWeight:600,flexShrink:0}}>{qa.label}</button>)}
-      </div>
-      <div style={{padding:"6px 16px 8px",background:T.white,borderTop:`1px solid ${T.border}`,display:"flex",gap:8,flexShrink:0}}>
-        <input value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Zeptejte se na cokoli…" style={{flex:1,padding:"10px 14px",borderRadius:22,border:`1px solid ${T.border}`,fontSize:13.5,outline:"none",background:T.bg,color:T.text,fontFamily:"inherit"}}/>
-        <button onClick={()=>send()} style={{width:42,height:42,borderRadius:21,background:inp.trim()?T.blue:"#D1D5DB",border:"none",cursor:inp.trim()?"pointer":"default",color:T.white,fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",transition:"background 0.15s"}}>↑</button>
-      </div>
-    </div>
-  );
-}
-
-function EmAlert({onDismiss}){
-  return(
-    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
-      <div style={{background:T.white,borderRadius:12,padding:24,border:`2px solid ${T.red}`}}>
-        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-          <div style={{width:40,height:40,borderRadius:20,background:T.redLight,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-          <div><div style={{fontSize:15,fontWeight:700,color:T.red}}>Zjištěn kritický příznak</div><div style={{fontSize:12,color:T.muted}}>Může být potřeba okamžitá pomoc</div></div>
-        </div>
-        <p style={{fontSize:13,color:T.text,lineHeight:1.6,margin:"0 0 14px"}}>Uvedli jste příznak, který může vyžadovat <strong>okamžitou lékařskou pomoc</strong>. Nečekejte na svou schůzku.</p>
-        <div style={{background:T.redLight,borderRadius:10,padding:"12px",marginBottom:14,textAlign:"center"}}><div style={{fontSize:12,fontWeight:600,color:"#991B1B"}}>Život ohrožující situace?</div><div style={{fontSize:20,fontWeight:700,color:T.red}}>Volejte 155 nebo 112</div></div>
-        <button onClick={onDismiss} style={{...S.btnO,color:T.muted,borderColor:T.border,fontSize:13}}>Mé příznaky nejsou naléhavé — pokračovat</button>
-      </div>
-    </div>
-  );
-}
-
-function PBar({value,min,max,status}){
-  const bc=status==="normal"?T.green:status==="high"?T.red:T.orange;
-  const span=max*1.4-min*0.8,dot=Math.min(Math.round(((value-min*0.8)/span)*100),95);
-  const rs=Math.round(((min-min*0.8)/span)*100),re=Math.round(((max-min*0.8)/span)*100);
-  return(<div style={{marginTop:8,marginBottom:4}}>
-    <div style={{position:"relative",height:7,background:"#E5E7EB",borderRadius:4}}>
-      <div style={{position:"absolute",left:`${rs}%`,width:`${re-rs}%`,height:"100%",background:"#D1FAE5",borderRadius:4}}/>
-      <div style={{position:"absolute",left:`${dot}%`,top:"50%",transform:"translate(-50%,-50%)",width:13,height:13,borderRadius:7,background:bc,border:"2px solid #fff"}}/>
-    </div>
-    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.label,marginTop:4}}><span>Nízká</span><span style={{color:T.green,fontWeight:600}}>Normální rozsah</span><span>Vysoká</span></div>
-  </div>);
-}
-
-const BM=[
-  {name:"Glukóza (nalačno)",code:"S-S-GLU",value:5.4,unit:"mmol/L",min:3.9,max:5.5,status:"normal",note:"V normálním rozsahu. Udržujte stávající životosprávu."},
-  {name:"LDL Cholesterol",code:"S-LDL",value:3.8,unit:"mmol/L",min:1.8,max:3.4,status:"high",note:"Mírně zvýšené. Zvažte omezení nasycených tuků a poraďte se s lékařem."},
-  {name:"HDL Cholesterol",code:"S-HDL",value:1.3,unit:"mmol/L",min:1.2,max:2.5,status:"normal",note:"Dobrá hodnota. Pravidelná aerobní aktivita pomáhá HDL udržovat."},
-];
-
-function FeatureA({onBack}){
-  const [tab,setTab]=useState("summary");
-  const [chat,setChat]=useState(false);
-  const [chatPrompt,setChatPrompt]=useState(null);
-  const [doc,setDoc]=useState(null);
-  const [drag,setDrag]=useState(false);
-  const fref=useRef(null);
-  const openChat=(p=null)=>{setChatPrompt(p);setChat(true);};
-  if(chat) return <AIChat onClose={()=>{setChat(false);setChatPrompt(null);}} context="Pacient si prohlíží výsledky: Glukóza 5,4 mmol/L (norm.), LDL 3,8 mmol/L (mírně zvýšené), HDL 1,3 mmol/L (norm.)." uploadedDoc={doc} initialPrompt={chatPrompt} quickActions={[{label:"Vysvětlit pojmy",prompt:"Vysvětli mi lékařské pojmy srozumitelně."},{label:"Další kroky",prompt:"Co bych měl/a probrat s lékařem?"},{label:"Trendy",prompt:"Co sledovat pro zlepšení výsledků?"},{label:"Příprava na MRI",prompt:"Jak se připravit na MRI?"}]}/>;
-  return(<>
-    <div style={S.hdr}><Back onClick={onBack}/><span style={S.ht}>AI Výsledky</span><div style={{display:"flex",alignItems:"center",gap:4}}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span style={{fontSize:11,color:T.red,fontWeight:600}}>28. 4. 2025</span></div></div>
-    <div style={{background:T.white,borderBottom:`1px solid ${T.border}`,display:"flex"}}>
-      {[["summary","Přehled"],["details","Biomarkery"],["ask","Zeptat se AI"]].map(([t,l])=>(
-        <button key={t} onClick={()=>t==="ask"?openChat():setTab(t)} style={{flex:1,padding:"11px 0",border:"none",background:"transparent",cursor:"pointer",fontSize:13,fontWeight:tab===t?700:400,color:tab===t?T.blue:T.muted,borderBottom:tab===t?`2px solid ${T.blue}`:"2px solid transparent"}}>{l}</button>
-      ))}
-    </div>
-    <div style={S.sc}>
-      <div onDragOver={e=>{e.preventDefault();setDrag(true)}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);const f=e.dataTransfer.files[0];if(f)setDoc(f.name);}} onClick={()=>fref.current?.click()} style={{border:`1.5px dashed ${drag?T.blue:T.border}`,borderRadius:10,padding:"12px 14px",marginBottom:12,background:drag?T.blueLight:T.white,display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
-        {doc?<><PDFChip name={doc} onRemove={e=>{e.stopPropagation();setDoc(null);}}/><span style={{fontSize:12,color:T.muted}}>Klepnutím nahradit</span></>:<><div style={{width:34,height:34,borderRadius:8,background:T.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div><div><div style={{fontSize:13,fontWeight:600,color:T.text}}>Nahrát zprávu</div><div style={{fontSize:11,color:T.muted}}>PDF, RTG nebo doporučení</div></div></>}
-        <input ref={fref} type="file" accept=".pdf,.jpg,.png" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)setDoc(f.name);}}/>
-      </div>
-      {tab==="summary"&&<>
-        <div style={{...S.card,background:T.blueLight,border:`1px solid #BFDBFE`}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}><div style={{width:36,height:36,borderRadius:18,background:T.blue,display:"flex",alignItems:"center",justifyContent:"center"}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div><div><div style={{fontSize:11,color:T.muted,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5}}>Celkový stav</div><div style={{fontSize:16,fontWeight:700,color:T.blue}}>Převážně stabilní</div></div></div>
-          <p style={{fontSize:13,color:"#374151",lineHeight:1.6,margin:0}}>Vaše výsledky jsou převážně v normě. LDL cholesterol je mírně zvýšený — doporučujeme probrát při příští návštěvě.</p>
-        </div>
-        <div style={{fontSize:11,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",margin:"4px 0 8px"}}>Klíčové biomarkery</div>
-        {BM.map((b,i)=>(
-          <div key={i} style={{...S.card,cursor:"pointer"}} onClick={()=>openChat(`Řekni mi více o výsledku ${b.name}: ${b.value} ${b.unit}.`)}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}><div><div style={{fontSize:14,fontWeight:700,color:T.text}}>{b.name}</div><div style={{fontSize:11,color:T.muted}}>{b.code}</div></div><div style={{textAlign:"right"}}><div style={{fontSize:18,fontWeight:700,color:b.status==="high"?T.red:T.text}}>{b.value}</div><div style={{fontSize:11,color:T.muted}}>{b.unit}</div></div></div>
-            <PBar {...b}/>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}><span style={S.tag(b.status==="normal"?"g":b.status==="high"?"r":"o")}>{b.status==="normal"?"✓ Normální":b.status==="high"?"↑ Nad rozsahem":"↓ Pod rozsahem"}</span><span style={{fontSize:11,color:T.blue,fontWeight:600}}>Zeptat se AI →</span></div>
-          </div>
-        ))}
-        <button onClick={()=>openChat()} style={{...S.btnP,display:"flex",alignItems:"center",justifyContent:"center",gap:8,marginTop:4}}><PulseIcon size={20}/>Otevřít AI Med-Explainer</button>
-      </>}
-      {tab==="details"&&<>
-        <div style={{...S.card,background:"#FFFBEB",border:"1px solid #FDE68A"}}><p style={{margin:0,fontSize:13,color:"#92400E",lineHeight:1.5}}><strong>Důležité:</strong> Výsledky jsou pouze informativní. Vždy se poraďte s lékařem.</p></div>
-        {BM.map((b,i)=>(
-          <div key={i} style={{...S.card,marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}><div><div style={{fontSize:15,fontWeight:700,color:T.text}}>{b.name}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>Reference: {b.min}–{b.max} {b.unit}</div></div><div style={{fontSize:22,fontWeight:700,color:b.status==="high"?T.red:T.text}}>{b.value} <span style={{fontSize:12,color:T.muted,fontWeight:400}}>{b.unit}</span></div></div>
-            <PBar {...b}/>
-            <div style={{marginTop:10,padding:"10px 12px",background:T.bg,borderRadius:8,fontSize:13,color:"#374151",lineHeight:1.5}}>{b.note}</div>
-          </div>
-        ))}
-        <button onClick={()=>openChat()} style={{...S.btnP,display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><PulseIcon size={20}/>Otevřít AI Med-Explainer</button>
-      </>}
-    </div>
-  </>);
-}
-
-const BSTEPS=["Příprava","Příznaky","Anamnéza","Předání"];
-
-function FeatureB({onBack}){
-  const [step,setStep]=useState(0);
-  const [chat,setChat]=useState(false);
-  const [alert,setAlert]=useState(false);
-  const [fasting,setFasting]=useState(null);
-  const [samples,setSamples]=useState({urine:false,stool:false,blood:false});
-  const [docs,setDocs]=useState({vacc:false,child:false,id:false});
-  const [concern,setConcern]=useState("");
-  const [hasSymptom,setHasSymptom]=useState(null);
-  const [symptom,setSymptom]=useState("");
-  const [location,setLocation]=useState("");
-  const [duration,setDuration]=useState("");
-  const [chars,setChars]=useState([]);
-  const [aggravating,setAggravating]=useState([]);
-  const [relieving,setRelieving]=useState([]);
-  const [treatment,setTreatment]=useState("");
-  const [severity,setSeverity]=useState(0);
-  const [sleep,setSleep]=useState(6);
-  const [stress,setStress]=useState(5);
-  const [meds,setMeds]=useState([{name:"Metformin 500mg"},{name:"Vitamin D 1000IU"}]);
-  const [newMed,setNewMed]=useState("");
-  const [noMedChg,setNoMedChg]=useState(false);
-  const [allergies,setAllergies]=useState([{name:"Penicilin"}]);
-  const [newAl,setNewAl]=useState("");
-  const tog=(arr,set,v)=>set(p=>p.includes(v)?p.filter(x=>x!==v):[...p,v]);
-  const chkEmerg=v=>{if(["bolest na hrudi","dušnost","infarkt","mrtvice","chest pain","shortness of breath"].some(k=>v.toLowerCase().includes(k)))setAlert(true);};
-  const SBar=()=>(
-    <div style={{background:T.white,padding:"10px 16px 8px",borderBottom:`1px solid ${T.border}`}}>
-      <div style={{display:"flex",alignItems:"center"}}>
-        {BSTEPS.map((s,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",flex:i<BSTEPS.length-1?1:"none"}}>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-              <div style={{width:22,height:22,borderRadius:11,background:step>i?T.green:step===i?T.blue:T.border,color:step>=i?T.white:T.muted,fontSize:9,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>{step>i?"✓":i+1}</div>
-              <div style={{fontSize:8,color:step===i?T.blue:T.muted,fontWeight:step===i?700:400,whiteSpace:"nowrap"}}>{s}</div>
-            </div>
-            {i<BSTEPS.length-1&&<div style={{flex:1,height:2,background:step>i?T.green:T.border,margin:"0 3px",marginBottom:14}}/>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-  if(chat) return <AIChat onClose={()=>setChat(false)} context="Pacient se připravuje na návštěvu praktického lékaře." quickActions={[{label:"Co mě čeká",prompt:"Co se děje při návštěvě PL?"},{label:"Odběr nalačno",prompt:"Jak se připravit na odběr krve nalačno?"},{label:"O Metforminu",prompt:"K čemu se používá Metformin?"}]}/>;
-  if(step===0) return(<>
-    {alert&&<EmAlert onDismiss={()=>setAlert(false)}/>}
-    <div style={S.hdr}><Back onClick={onBack}/><span style={S.ht}>Digitální sestra</span><div style={{fontSize:11,color:T.muted}}>Návštěva PL</div></div>
-    <SBar/>
-    <div style={S.sc}>
-      <div style={{...S.card,background:T.blueLight,border:`1px solid #BFDBFE`}}>
-        <div style={{display:"flex",gap:10,alignItems:"center"}}><PulseIcon size={32}/><div><div style={{fontSize:14,fontWeight:700,color:T.blue}}>Dobré ráno, Lucie</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>Vaše návštěva je za <strong style={{color:T.blue}}>2 hodiny</strong>. Připravíme se společně.</div></div></div>
-      </div>
-      <div style={S.card}>
-        <div style={S.sl}>Hlavní důvod návštěvy</div>
-        <textarea value={concern} onChange={e=>{setConcern(e.target.value);chkEmerg(e.target.value);}} placeholder="Co je hlavním cílem dnešní návštěvy?" style={{width:"100%",minHeight:72,padding:"10px 12px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,lineHeight:1.5,resize:"none",outline:"none",background:T.bg,boxSizing:"border-box",color:T.text,fontFamily:"inherit"}}/>
-      </div>
-      <div style={S.card}>
-        <div style={S.sl}>Stav nalačno</div>
-        <div style={{display:"flex",gap:8}}>
-          {["Ano — jsem nalačno","Ne — jedl/a jsem"].map(opt=>(
-            <button key={opt} onClick={()=>setFasting(opt.startsWith("Ano"))} style={{flex:1,padding:"9px 6px",borderRadius:10,border:`1px solid ${fasting===(opt.startsWith("Ano"))?T.blue:T.border}`,background:fasting===(opt.startsWith("Ano"))?T.blue:"transparent",color:fasting===(opt.startsWith("Ano"))?T.white:T.muted,fontWeight:700,fontSize:11,cursor:"pointer"}}>{opt}</button>
-          ))}
-        </div>
-      </div>
-      <div style={S.card}>
-        <div style={S.sl}>Připravené vzorky</div>
-        {[["urine","🧪","Vzorek moče"],["stool","🟤","Vzorek stolice"],["blood","🩸","Odběr krve (v ordinaci)"]].map(([k,ic,lbl])=>(
-          <label key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
-            <input type="checkbox" checked={samples[k]} onChange={e=>setSamples(s=>({...s,[k]:e.target.checked}))} style={{accentColor:T.blue,width:16,height:16}}/>
-            <span style={{fontSize:13,color:T.text}}>{ic} {lbl}</span>
-          </label>
-        ))}
-      </div>
-      <div style={S.card}>
-        <div style={S.sl}>Dokumenty</div>
-        {[["vacc","💉","Očkovací průkaz"],["child","📗","Zdravotní knížka dítěte"],["id","🪪","Průkaz pojištěnce / OP"]].map(([k,ic,lbl])=>(
-          <label key={k} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
-            <input type="checkbox" checked={docs[k]} onChange={e=>setDocs(d=>({...d,[k]:e.target.checked}))} style={{accentColor:T.blue,width:16,height:16}}/>
-            <span style={{fontSize:13,color:T.text}}>{ic} {lbl}</span>
-          </label>
-        ))}
-      </div>
-      <button onClick={()=>setStep(1)} style={S.btnP}>Pokračovat k příznakům</button>
-    </div>
-  </>);
-  if(step===1) return(<>
-    {alert&&<EmAlert onDismiss={()=>setAlert(false)}/>}
-    <div style={S.hdr}><Back onClick={()=>setStep(0)}/><span style={S.ht}>Digitální sestra</span><div style={{fontSize:11,color:T.muted}}>Návštěva PL</div></div>
-    <SBar/>
-    <div style={S.sc}>
-      <div style={S.card}>
-        <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:8}}>Máte nové nebo zhoršující se příznaky?</div>
-        <div style={{display:"flex",gap:8}}>
-          {["Ano","Ne — cítím se stabilně"].map(opt=>(
-            <button key={opt} onClick={()=>setHasSymptom(opt==="Ano")} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${hasSymptom===(opt==="Ano")?T.blue:T.border}`,background:hasSymptom===(opt==="Ano")?T.blue:"transparent",color:hasSymptom===(opt==="Ano")?T.white:T.muted,fontWeight:700,fontSize:12,cursor:"pointer"}}>{opt}</button>
-          ))}
-        </div>
-      </div>
-      {hasSymptom===true&&<>
-        <div style={{...S.card,border:`1.5px solid ${T.blue}`}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
-            <div style={{width:4,height:26,borderRadius:2,background:T.blue,flexShrink:0}}/>
-            <div><div style={{fontSize:14,fontWeight:700,color:T.blue}}>Triáž příznaků — OLD CARTS</div><div style={{fontSize:11,color:T.muted}}>Standardizovaný klinický dotazník</div></div>
-          </div>
-          {[
-            {lbl:"Vznik — Hlavní příznak",ph:"např. Bolest dolní části zad",val:symptom,set:v=>{setSymptom(v);chkEmerg(v);}},
-            {lbl:"Lokalizace — Kde přesně?",ph:"např. Levá dolní část zad, vyzařuje do nohy",val:location,set:setLocation},
-            {lbl:"Trvání — Jak dlouho?",ph:"např. 3 dny, začalo náhle",val:duration,set:setDuration},
-            {lbl:"Léčba — Vyzkoušeli jste něco?",ph:"např. Ibuprofen 400 mg, led",val:treatment,set:setTreatment},
-          ].map(f=>(
-            <div key={f.lbl} style={{marginBottom:10}}>
-              <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:4}}>{f.lbl}</div>
-              <input value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph} style={{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,outline:"none",background:T.bg,boxSizing:"border-box"}}/>
-            </div>
-          ))}
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:6}}>Charakter — Jak bolest vypadá?</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{["Tupá","Ostrá","Pálení","Tepání","Křeče","Tlak","Píchání","Trhavá"].map(c=><button key={c} onClick={()=>tog(chars,setChars,c)} style={S.chip(chars.includes(c))}>{c}</button>)}</div>
-          </div>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:6}}>Zhoršující faktory</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{["Pohyb","Sezení","Stání","Jídlo","Stres","Chlad","Teplo"].map(c=><button key={c} onClick={()=>tog(aggravating,setAggravating,c)} style={S.chip(aggravating.includes(c))}>{c}</button>)}</div>
-          </div>
-          <div style={{marginBottom:10}}>
-            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:6}}>Úlevné faktory</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{["Klid","Led","Teplo","Léky","Elevace","Masáž"].map(c=><button key={c} onClick={()=>tog(relieving,setRelieving,c)} style={S.chip(relieving.includes(c))}>{c}</button>)}</div>
-          </div>
-          <div>
-            <div style={{fontSize:12,fontWeight:600,color:T.text,marginBottom:8}}>Intenzita bolesti (1–10)</div>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              {[1,2,3,4,5,6,7,8,9,10].map(n=>{const cs=["#22A06B","#22A06B","#22A06B","#F59E0B","#F59E0B","#F97316","#F97316","#EF4444","#DC2626","#B91C1C"];return <div key={n} onClick={()=>setSeverity(n)} style={{width:26,height:26,borderRadius:13,background:severity===n?cs[n-1]:T.bg,border:severity===n?`2px solid ${cs[n-1]}`:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,cursor:"pointer",color:severity===n?T.white:T.muted}}>{n}</div>;})}
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,color:T.green,fontWeight:600}}>Bez bolesti</span><span style={{fontSize:10,color:"#B91C1C",fontWeight:600}}>Nejhorší bolest</span></div>
-          </div>
-        </div>
-        <div style={S.card}>
-          <div style={S.sl}>Životní styl</div>
-          {[{lbl:"Kvalita spánku",val:sleep,set:setSleep,L:"Velmi špatná",R:"Výborná"},{lbl:"Úroveň stresu",val:stress,set:setStress,L:"Velmi nízká",R:"Extrémní"}].map(s=>(
-            <div key={s.lbl} style={{marginBottom:12}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:13,fontWeight:600,color:T.text}}>{s.lbl}</span><span style={{fontSize:13,fontWeight:700,color:T.blue}}>{s.val}/10</span></div>
-              <input type="range" min="1" max="10" step="1" value={s.val} onChange={e=>s.set(Number(e.target.value))} style={{width:"100%",accentColor:T.blue}}/>
-              <div style={{display:"flex",justifyContent:"space-between"}}><span style={{fontSize:10,color:T.muted}}>{s.L}</span><span style={{fontSize:10,color:T.muted}}>{s.R}</span></div>
-            </div>
-          ))}
-        </div>
-      </>}
-      <button onClick={()=>setStep(2)} style={{...S.btnP,opacity:hasSymptom!==null?1:0.4}}>Pokračovat na anamnézu</button>
-    </div>
-  </>);
-  if(step===2) return(<>
-    <div style={S.hdr}><Back onClick={()=>setStep(1)}/><span style={S.ht}>Digitální sestra</span><div style={{fontSize:11,color:T.muted}}>Návštěva PL</div></div>
-    <SBar/>
-    <div style={S.sc}>
-      <div style={S.card}>
-        <div style={S.sl}>Současná medikace</div>
-        {meds.map((m,i)=>(
-          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-            <div><div style={{fontSize:13,fontWeight:600,color:T.text}}>{m.name}</div><div style={{fontSize:11,color:T.muted}}>Dle předchozích záznamů</div></div>
-            <span style={S.tag("g")}>✓ Potvrzeno</span>
-          </div>
-        ))}
-        <label style={{display:"flex",alignItems:"center",gap:8,marginTop:10,marginBottom:8,cursor:"pointer"}}>
-          <input type="checkbox" checked={noMedChg} onChange={e=>setNoMedChg(e.target.checked)} style={{accentColor:T.blue,width:16,height:16}}/>
-          <span style={{fontSize:13,color:T.text}}>Od poslední návštěvy žádné změny</span>
-        </label>
-        {!noMedChg&&<div style={{display:"flex",gap:8}}>
-          <input value={newMed} onChange={e=>setNewMed(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(setMeds(m=>[...m,{name:newMed.trim()}]),setNewMed(""))} placeholder="Přidat nový lék…" style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,outline:"none",background:T.bg}}/>
-          <button onClick={()=>{if(newMed.trim()){setMeds(m=>[...m,{name:newMed.trim()}]);setNewMed("");}}} style={{padding:"8px 14px",borderRadius:8,background:T.blue,border:"none",color:T.white,fontWeight:700,fontSize:13,cursor:"pointer"}}>Přidat</button>
-        </div>}
-      </div>
-      <div style={S.card}>
-        <div style={S.sl}>Známé alergie</div>
-        {allergies.map((a,i)=>(
-          <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.border}`}}>
-            <span style={{fontSize:13,fontWeight:600,color:T.text}}>{a.name}</span>
-            <span style={S.tag("o")}>⚠ Alergie</span>
-          </div>
-        ))}
-        <div style={{display:"flex",gap:8,marginTop:10}}>
-          <input value={newAl} onChange={e=>setNewAl(e.target.value)} onKeyDown={e=>e.key==="Enter"&&(setAllergies(a=>[...a,{name:newAl.trim()}]),setNewAl(""))} placeholder="Přidat alergii…" style={{flex:1,padding:"8px 12px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,outline:"none",background:T.bg}}/>
-          <button onClick={()=>{if(newAl.trim()){setAllergies(a=>[...a,{name:newAl.trim()}]);setNewAl("");}}} style={{padding:"8px 14px",borderRadius:8,background:T.red,border:"none",color:T.white,fontWeight:700,fontSize:13,cursor:"pointer"}}>Přidat</button>
-        </div>
-      </div>
-      <button onClick={()=>setStep(3)} style={S.btnP}>Vygenerovat předání lékaři</button>
-    </div>
-  </>);
-  return(<>
-    <div style={S.hdr}><Back onClick={()=>setStep(2)}/><span style={S.ht}>Digitální sestra</span><div style={{fontSize:11,color:T.muted}}>Návštěva PL</div></div>
-    <SBar/>
-    <div style={S.sc}>
-      <div style={{...S.card,background:T.blueLight,border:`1px solid #BFDBFE`}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",gap:8,alignItems:"center"}}><Leaf size={18}/><div><div style={{fontSize:13,fontWeight:700,color:T.blue}}>Předávací zpráva</div><div style={{fontSize:11,color:T.muted}}>MUDr. Vostradovská · dnes 10:00</div></div></div><span style={S.tag("g")}>✓ Odesláno</span></div>
-      </div>
-      {concern&&<div style={S.card}><div style={S.sl}>Hlavní důvod návštěvy</div><p style={{margin:0,fontSize:13,color:T.text,lineHeight:1.5}}>{concern}</p></div>}
-      <div style={S.card}>
-        <div style={S.sl}>Příprava</div>
-        {fasting!==null&&<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:13,color:T.text}}>Nalačno</span><span style={S.tag(fasting?"g":"o")}>{fasting?"Ano ✓":"Ne"}</span></div>}
-        {Object.entries(samples).filter(([,v])=>v).map(([k])=><div key={k} style={{padding:"5px 0",fontSize:13,color:T.text}}>✓ {k==="urine"?"Vzorek moče":k==="stool"?"Vzorek stolice":"Odběr krve"}</div>)}
-        {Object.entries(docs).filter(([,v])=>v).map(([k])=><div key={k} style={{padding:"5px 0",fontSize:13,color:T.text}}>✓ {k==="vacc"?"Očkovací průkaz":k==="child"?"Zdravotní knížka":"Průkaz pojištěnce"}</div>)}
-      </div>
-      {hasSymptom===true&&symptom&&<div style={{...S.card,border:`1px solid ${T.blue}`}}>
-        <div style={S.sl}>Triáž příznaků — OLD CARTS</div>
-        {[["Příznak",symptom],["Lokalizace",location],["Trvání",duration],["Charakter",chars.join(", ")],["Zhoršující",aggravating.join(", ")],["Úlevné",relieving.join(", ")],["Léčba",treatment],["Intenzita",severity?`${severity}/10`:""]].filter(([,v])=>v).map(([k,v])=>(
-          <div key={k} style={{display:"flex",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:12,color:T.muted,fontWeight:600,minWidth:80}}>{k}</span><span style={{fontSize:13,color:k==="Intenzita"&&severity>=8?T.red:T.text,fontWeight:k==="Intenzita"&&severity>=8?700:400}}>{v}</span></div>
-        ))}
-      </div>}
-      {hasSymptom===false&&<div style={S.card}><div style={S.sl}>Příznaky</div><div style={{fontSize:13,color:T.green,fontWeight:600}}>✓ Žádné nové příznaky</div></div>}
-      <div style={S.card}><div style={S.sl}>Medikace</div>{meds.map((m,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:13,color:T.text}}>{m.name}</span><span style={S.tag("g")}>Potvrzeno</span></div>)}{noMedChg&&<div style={{fontSize:12,color:T.green,marginTop:6,fontWeight:600}}>✓ Žádné změny potvrzeny</div>}</div>
-      <div style={S.card}><div style={S.sl}>Alergie</div>{allergies.map((a,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.border}`}}><span style={{fontSize:13,color:T.text}}>{a.name}</span><span style={S.tag("o")}>⚠ Alergie</span></div>)}</div>
-      <div style={{...S.card,background:"#D1FAE5",border:"1px solid #6EE7B7",marginBottom:12}}><div style={{display:"flex",gap:10,alignItems:"flex-start"}}><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#065F46" strokeWidth="2" style={{flexShrink:0,marginTop:1}}><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg><p style={{margin:0,fontSize:13,color:"#065F46",lineHeight:1.5}}>Předání dokončeno. Lékař byl informován a zprávu si před návštěvou prostuduje.</p></div></div>
-      <button onClick={()=>setChat(true)} style={{...S.btnO,marginBottom:10}}>Zeptat se CM Asistenta</button>
-      <button style={S.btnP}>Potvrdit příchod</button>
-    </div>
-  </>);
-}
-
-function FeatureC({onBack}){
-  const [chat,setChat]=useState(false);
-  const [tab,setTab]=useState("plan");
-  const [rxR,setRxR]=useState({});
-  const [rehab,setRehab]=useState({});
-  const [diet,setDiet]=useState({});
-  const rxList=[{name:"Amoxicilin 500 mg",dose:"1 kapsle",freq:"3× denně · 7 dní",urgency:"r"},{name:"Ibuprofen 400 mg",dose:"1 tableta",freq:"Dle potřeby · max 3×/den",urgency:"o"},{name:"Probiotikum (Linex)",dose:"1 kapsle",freq:"2× denně · 14 dní",urgency:"g"}];
-  const refs=[{spec:"Ortopedie",reason:"Kontrola disku L5-S1",clinic:"Praha 5 — Waltrovka",priority:"Do 4 týdnů",urgency:"r"},{spec:"Fyzioterapie",reason:"Rehabilitace bederní páteře",clinic:"CM Rehabilitační centrum",priority:"Do 2 týdnů",urgency:"o"}];
-  const rehabItems=["10 min ranní protažení","Cvičení kočka-kráva × 15 opakování","Mosty (glute bridges) × 20 opakování","30 min chůze denně","Nesedět déle než 45 minut v kuse"];
-  const dietItems=["Zvýšit příjem vody na 2,5 l/den","Omezit průmyslově zpracované potraviny","Přidat Omega-3 (ryby, len)","Vyhýbat se alkoholu během antibiotik"];
-  const daysLeft=18,prog=Math.round((30-daysLeft)/30*100);
-  if(chat) return <AIChat onClose={()=>setChat(false)} context="Pacient absolvoval návštěvu PL. Léčebný plán: Amoxicilin, Ibuprofen, probiotikum. Doporučení: ortopedie a fyzioterapie. Kontrola za 18 dní." quickActions={[{label:"O Amoxicilinu",prompt:"K čemu slouží Amoxicilin a jaké jsou vedlejší účinky?"},{label:"Tipy na rehabilitaci",prompt:"Jak se motivovat k pravidelné domácí fyzioterapii?"},{label:"Příprava na ortopedii",prompt:"Na co se připravit před návštěvou ortopeda?"}]}/>;
-  return(<>
-    <div style={S.hdr}><Back onClick={onBack}/><span style={S.ht}>Plán péče</span><button onClick={()=>setChat(true)} style={{display:"flex",alignItems:"center",gap:5,background:T.blueLight,border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer"}}><PulseIcon size={16}/><span style={{fontSize:11,fontWeight:700,color:T.blue}}>Zeptat se AI</span></button></div>
-    <div style={{background:T.white,borderBottom:`1px solid ${T.border}`,display:"flex"}}>
-      {[["plan","Plán"],["rx","Recepty"],["referrals","Doporučení"]].map(([t,l])=>(
-        <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"11px 0",border:"none",background:"transparent",cursor:"pointer",fontSize:12,fontWeight:tab===t?700:400,color:tab===t?T.blue:T.muted,borderBottom:tab===t?`2px solid ${T.blue}`:"2px solid transparent"}}>{l}</button>
-      ))}
-    </div>
-    <div style={S.sc}>
-      {tab==="plan"&&<>
-        <div style={{...S.card,background:T.blue,border:"none"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-            <div><div style={{fontSize:11,fontWeight:600,color:"rgba(255,255,255,0.65)",textTransform:"uppercase",letterSpacing:0.8}}>Příští schůzka</div><div style={{fontSize:26,fontWeight:700,color:T.white,marginTop:2,lineHeight:1}}>{daysLeft} <span style={{fontSize:14,fontWeight:400}}>dní</span></div><div style={{fontSize:12,color:"rgba(255,255,255,0.75)",marginTop:2}}>Kontrola PL · 23. 5. 2025</div></div>
-            <div style={{width:52,height:52,borderRadius:26,background:"rgba(255,255,255,0.15)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}><div style={{fontSize:16,fontWeight:700,color:T.white}}>{prog}%</div><div style={{fontSize:8,color:"rgba(255,255,255,0.65)"}}>uzdravení</div></div>
-          </div>
-          <div style={{height:4,background:"rgba(255,255,255,0.2)",borderRadius:2}}><div style={{height:"100%",background:T.white,borderRadius:2,width:`${prog}%`}}/></div>
-        </div>
-        <div style={S.card}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={S.sl}>Denní rehabilitační cvičení</div><span style={S.tag("b")}>{Object.values(rehab).filter(Boolean).length}/{rehabItems.length} hotovo</span></div>
-          {rehabItems.map((item,i)=>(
-            <label key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
-              <div onClick={()=>setRehab(r=>({...r,[i]:!r[i]}))} style={{width:20,height:20,borderRadius:5,border:`1.5px solid ${rehab[i]?T.blue:T.border}`,background:rehab[i]?T.blue:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,cursor:"pointer"}}>{rehab[i]&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>}</div>
-              <span style={{fontSize:13,color:rehab[i]?T.muted:T.text,textDecoration:rehab[i]?"line-through":"none",lineHeight:1.4}}>{item}</span>
-            </label>
-          ))}
-        </div>
-        <div style={S.card}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><div style={S.sl}>Dietní doporučení</div><span style={S.tag("g")}>{Object.values(diet).filter(Boolean).length}/{dietItems.length} dodrženo</span></div>
-          {dietItems.map((item,i)=>(
-            <label key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
-              <div onClick={()=>setDiet(d=>({...d,[i]:!d[i]}))} style={{width:20,height:20,borderRadius:5,border:`1.5px solid ${diet[i]?T.green:T.border}`,background:diet[i]?T.green:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1,cursor:"pointer"}}>{diet[i]&&<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={T.white} strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>}</div>
-              <span style={{fontSize:13,color:diet[i]?T.muted:T.text,textDecoration:diet[i]?"line-through":"none",lineHeight:1.4}}>{item}</span>
-            </label>
-          ))}
-        </div>
-      </>}
-      {tab==="rx"&&<>
-        <div style={{...S.card,background:"#FFFBEB",border:`1px solid #FDE68A`,marginBottom:12}}><p style={{margin:0,fontSize:12,color:"#92400E",lineHeight:1.5}}><strong>Extrahováno ze záznamu návštěvy</strong> — 5. 5. 2025, MUDr. Vostradovská.</p></div>
-        {rxList.map((rx,i)=>(
-          <div key={i} style={{...S.card,marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}><div><div style={{fontSize:15,fontWeight:700,color:T.text}}>{rx.name}</div><div style={{fontSize:12,color:T.muted,marginTop:2}}>{rx.dose} · {rx.freq}</div></div><span style={S.tag(rx.urgency)}>{rx.urgency==="r"?"Prioritní":rx.urgency==="o"?"Pravidelný":"Podpůrný"}</span></div>
-            <button onClick={()=>setRxR(r=>({...r,[i]:!r[i]}))} style={{width:"100%",padding:"9px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:700,border:`1px solid ${rxR[i]?T.green:T.blue}`,background:rxR[i]?"#D1FAE5":"transparent",color:rxR[i]?T.green:T.blue,transition:"all 0.15s"}}>{rxR[i]?"✓ Připomínka nastavena":"🔔 Nastavit připomínku"}</button>
-          </div>
-        ))}
-      </>}
-      {tab==="referrals"&&<>
-        <div style={{...S.card,background:T.blueLight,border:`1px solid #BFDBFE`,marginBottom:12}}><p style={{margin:0,fontSize:12,color:"#1E40AF",lineHeight:1.5}}><strong>2 doporučení extrahována</strong> ze záznamu návštěvy.</p></div>
-        {refs.map((r,i)=>(
-          <div key={i} style={{...S.card,marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}><div style={{fontSize:15,fontWeight:700,color:T.text}}>{r.spec}</div><span style={S.tag(r.urgency)}>{r.priority}</span></div>
-            <div style={{fontSize:13,color:T.muted,marginBottom:4}}>{r.reason}</div>
-            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:12}}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={T.muted} strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg><span style={{fontSize:12,color:T.muted}}>{r.clinic}</span></div>
-            <button style={{...S.btnP,fontSize:13,padding:"10px"}}>Objednat se →</button>
-          </div>
-        ))}
-      </>}
-    </div>
-  </>);
-}
+const Leaf=({size=22,color="#E8314A"})=><svg width={size} height={size} viewBox="0 0 40 40" fill={color}><path d="M20 2 L22 12 L30 8 L26 16 L36 18 L28 22 L32 32 L22 26 L20 38 L18 26 L8 32 L12 22 L4 18 L14 16 L10 8 L18 12 Z"/></svg>;
+const stag=(c)=>({display:"inline-block",padding:"3px 9px",borderRadius:6,fontSize:11,fontWeight:600,background:c==="g"?"#D1FAE5":c==="o"?"#FEF3C7":c==="r"?Tc.redLight:Tc.blueLight,color:c==="g"?"#065F46":c==="o"?Tc.orange:c==="r"?Tc.red:Tc.blue});
 
 function App(){
   const [screen,setScreen]=useState("home");
   const [navTab,setNavTab]=useState("Moje zdraví");
-  const Nav=()=>(<div style={S.nav}>{[["🏠","Události"],["♥","Moje zdraví"],null,["✉","Novinky"],["👤","Profil"]].map((item,i)=>item===null?<button key="fab" style={S.fab} onClick={()=>setScreen("home")}>+</button>:<div key={i} onClick={()=>{setNavTab(item[1]);setScreen("home");}} style={S.ni(navTab===item[1])}><span style={{fontSize:16}}>{item[0]}</span><span>{item[1]}</span></div>)}</div>);
-  const Shell=({children})=>(<div style={{background:"#111827",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}><div style={S.phone}><div style={S.sb}><span>9:41</span><span>▶ ◀ ■ 95%</span></div>{children}<Nav/></div></div>);
-  if(screen==="A") return <Shell><FeatureA onBack={()=>setScreen("home")}/></Shell>;
-  if(screen==="B") return <Shell><FeatureB onBack={()=>setScreen("home")}/></Shell>;
-  if(screen==="C") return <Shell><FeatureC onBack={()=>setScreen("home")}/></Shell>;
-  return(<Shell>
-    <div style={{background:T.white,padding:"18px 20px 14px",borderBottom:`1px solid ${T.border}`,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
-      <Leaf size={26}/><div style={{fontSize:13,fontWeight:700,color:T.blue,letterSpacing:1.2,textTransform:"uppercase"}}>Canadian Medical</div><div style={{fontSize:11,color:T.muted}}>Patient Engagement Suite</div>
+  const Nav=()=>(
+    <div style={{position:"absolute",bottom:0,left:0,right:0,background:Tc.white,borderTop:`1px solid ${Tc.border}`,display:"flex",alignItems:"center",justifyContent:"space-around",padding:"10px 0 14px",height:64}}>
+      {[["🏠","Události"],["♥","Moje zdraví"],null,["✉","Novinky"],["👤","Profil"]].map((item,i)=>
+        item===null
+          ?<button key="fab" style={{width:52,height:52,borderRadius:26,background:Tc.red,border:"none",color:Tc.white,fontSize:28,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",marginTop:-18,boxShadow:"0 2px 8px rgba(232,49,74,.35)"}} onClick={()=>setScreen("home")}>+</button>
+          :<div key={i} onClick={()=>{setNavTab(item[1]);setScreen("home");}} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:3,fontSize:10,fontWeight:navTab===item[1]?700:400,color:navTab===item[1]?Tc.red:Tc.muted,cursor:"pointer"}}><span style={{fontSize:16}}>{item[0]}</span><span>{item[1]}</span></div>
+      )}
     </div>
-    <div style={{...S.sc,paddingBottom:90}}>
-      <div style={{...S.card,background:T.blueLight,border:`1px solid #BFDBFE`,marginTop:4}}>
-        <div style={{fontSize:15,fontWeight:700,color:T.blue}}>Dobré ráno, Lucie 👋</div>
-        <div style={{fontSize:13,color:T.muted,marginTop:4,lineHeight:1.5}}>Máte <strong style={{color:T.blue}}>1 nadcházející návštěvu</strong> a aktivní plán péče.</div>
+  );
+  const Shell=({children})=>(
+    <div style={{background:"#111827",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{width:375,minHeight:780,background:Tc.bg,borderRadius:36,border:"8px solid #111827",overflow:"hidden",position:"relative",fontFamily:"'Inter','Helvetica Neue',Arial,sans-serif",display:"flex",flexDirection:"column"}}>
+        <div style={{background:Tc.white,padding:"12px 20px 8px",display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:12,fontWeight:600,color:Tc.text}}>
+          <span>9:41</span><span>▶ ◀ ■ 95%</span>
+        </div>
+        {children}
+        <Nav/>
       </div>
-      <div style={{fontSize:11,fontWeight:700,color:T.muted,letterSpacing:0.8,textTransform:"uppercase",margin:"4px 0 10px"}}>Funkce</div>
-      {[
-        {key:"A",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,title:"AI výsledky",sub:"AI Med-Explainer",desc:"Vaše výsledky jsou připraveny. 1 hodnota vyžaduje pozornost — LDL cholesterol.",badge:"NOVÉ",badgeC:"r",meta:"28. 4. 2025"},
-        {key:"B",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,title:"Nadcházející návštěva",sub:"Digitální sestra — příjem",desc:"Vyplňte příjmový dotazník pro návštěvu praktického lékaře v 10:00.",badge:"DNES",badgeC:"r",meta:"4 kroky"},
-        {key:"C",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth="2"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/></svg>,title:"Plán péče",sub:"Péče po návštěvě",desc:"3 recepty, 2 doporučení a denní rehabilitační checklist.",badge:"18 dní zbývá",badgeC:"b",meta:"Kontrola: 23. 5."},
-      ].map(f=>(
-        <div key={f.key} onClick={()=>setScreen(f.key)} style={{...S.card,cursor:"pointer",marginBottom:10}}>
-          <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
-            <div style={{width:44,height:44,borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{f.icon}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
-                <div><div style={{fontSize:14,fontWeight:700,color:T.text}}>{f.title}</div><div style={{fontSize:11,color:T.muted,marginTop:1}}>{f.sub}</div></div>
-                <span style={{...S.tag(f.badgeC),flexShrink:0}}>{f.badge}</span>
+    </div>
+  );
+
+  if(screen==="B") return<Shell><FeatureB onBack={()=>setScreen("home")}/></Shell>;
+
+  // Original home screen
+  const features=[
+    {key:"A",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={Tc.red} strokeWidth="2" strokeLinecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>,title:"AI výsledky",sub:"AI Med-Explainer",desc:"Vaše výsledky jsou připraveny. 1 hodnota vyžaduje pozornost — LDL cholesterol.",badge:"NOVÉ",badgeC:"r",meta:"28. 4. 2025"},
+    {key:"B",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={Tc.red} strokeWidth="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>,title:"Nadcházející návštěva",sub:"Digitální sestra — příjem",desc:"Vyplňte příjmový dotazník pro návštěvu praktického lékaře v 10:00.",badge:"DNES",badgeC:"r",meta:"5 větví"},
+    {key:"C",icon:<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={Tc.red} strokeWidth="2"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h7l5 5v11a2 2 0 01-2 2z"/></svg>,title:"Plán péče",sub:"Péče po návštěvě",desc:"3 recepty, 2 doporučení a denní rehabilitační checklist.",badge:"18 dní zbývá",badgeC:"b",meta:"Kontrola: 23. 5."},
+  ];
+
+  return(
+    <Shell>
+      <div style={{background:Tc.white,padding:"18px 20px 14px",borderBottom:`1px solid ${Tc.border}`,display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+        <Leaf size={26}/><div style={{fontSize:13,fontWeight:700,color:Tc.blue,letterSpacing:1.2,textTransform:"uppercase"}}>Canadian Medical</div><div style={{fontSize:11,color:Tc.muted}}>Patient Engagement Suite</div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:16,paddingBottom:90}}>
+        <div style={{background:Tc.blueLight,border:`1px solid #BFDBFE`,borderRadius:10,padding:16,marginBottom:12,marginTop:4}}>
+          <div style={{fontSize:15,fontWeight:700,color:Tc.blue}}>Dobré ráno, Lucie 👋</div>
+          <div style={{fontSize:13,color:Tc.muted,marginTop:4,lineHeight:1.5}}>Máte <strong style={{color:Tc.blue}}>1 nadcházející návštěvu</strong> a aktivní plán péče.</div>
+        </div>
+        <div style={{fontSize:11,fontWeight:700,color:Tc.muted,letterSpacing:.8,textTransform:"uppercase",margin:"4px 0 10px"}}>Funkce</div>
+        {features.map(f=>(
+          <div key={f.key} onClick={()=>setScreen(f.key)} style={{background:Tc.white,borderRadius:10,border:`1px solid ${Tc.border}`,padding:16,marginBottom:10,cursor:"pointer"}}>
+            <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+              <div style={{width:44,height:44,borderRadius:10,background:Tc.bg,border:`1px solid ${Tc.border}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{f.icon}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:6}}>
+                  <div><div style={{fontSize:14,fontWeight:700,color:Tc.text}}>{f.title}</div><div style={{fontSize:11,color:Tc.muted,marginTop:1}}>{f.sub}</div></div>
+                  <span style={stag(f.badgeC)}>{f.badge}</span>
+                </div>
+                <div style={{fontSize:13,color:Tc.muted,lineHeight:1.5,marginTop:6}}>{f.desc}</div>
               </div>
-              <div style={{fontSize:13,color:T.muted,lineHeight:1.5,marginTop:6}}>{f.desc}</div>
+            </div>
+            <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${Tc.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{fontSize:11,color:Tc.label}}>{f.meta}</span>
+              <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:12,fontWeight:700,color:Tc.blue}}>Otevřít</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={Tc.blue} strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg></div>
             </div>
           </div>
-          <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:11,color:T.label}}>{f.meta}</span>
-            <div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontSize:12,fontWeight:700,color:T.blue}}>Otevřít</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={T.blue} strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg></div>
-          </div>
+        ))}
+        <div style={{marginTop:8,textAlign:"center",padding:"10px 0"}}>
+          <div style={{fontSize:11,color:Tc.muted}}>Život ohrožující situace:</div>
+          <div style={{fontSize:14,fontWeight:700,color:Tc.text}}>Vždy volejte <span style={{color:Tc.red}}>112</span> nebo <span style={{color:Tc.red}}>155</span>!</div>
         </div>
-      ))}
-      <div style={{marginTop:8,textAlign:"center",padding:"10px 0"}}>
-        <div style={{fontSize:11,color:T.muted}}>Život ohrožující situace:</div>
-        <div style={{fontSize:14,fontWeight:700,color:T.text}}>Vždy volejte <span style={{color:T.red}}>112</span> nebo <span style={{color:T.red}}>155</span>!</div>
       </div>
-    </div>
-  </Shell>);
+    </Shell>
+  );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
